@@ -490,21 +490,46 @@ async function generateCustomVoice() {
 
     if (!response.ok) {
 
-      let message =
-        "No se pudo generar el audio.";
+  let message =
+    "No se pudo generar el audio.";
 
-      try {
+  try {
 
-        const data =
-          await response.json();
+    const contentType =
+      response.headers.get("content-type") || "";
 
-        message =
-          data.error ||
-          message;
+    if (contentType.includes("application/json")) {
 
-      } catch {}
+      const data =
+        await response.json();
 
-      throw new Error(message);
+      message =
+        data.error ||
+        message;
+
+    } else {
+
+      const text =
+        await response.text();
+
+      console.error(
+        "Respuesta no JSON del servidor:",
+        text
+      );
+
+      message =
+        "El servidor no respondió correctamente. Verifica que el backend de Render esté funcionando.";
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Error leyendo respuesta:",
+      error
+    );
+  }
+
+  throw new Error(message);
     }
 
     const audioBlob =
