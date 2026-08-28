@@ -250,45 +250,227 @@ $("generate").onclick = async () => {
 // seleccionada con el backend.
 // ======================================================
 
-$("speak").onclick = () => {
+let selectedVoiceId = localStorage.getItem("animadorSelectedVoice") || null;
+let currentAudio = null;
+let generatingAudio = false;
 
-  speechSynthesis.cancel();
+function getSelectedVoice(){
+  return selectedVoiceId;
+}
 
-  const text =
-    $("script").value.trim();
+function stopCustomAudio(){
+  if(currentAudio){
+    try{
+      currentAudio.pause();
+      currentAudio.currentTime=0;
+    }catch{}
+    currentAudio=null;
+  }
+}
 
-  if (!text) return;
+async function blobToDataURL(blob){
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-  const voiceName =
-    selectedVoiceId
-      ? "Voz personalizada seleccionada"
-      : "voz del sistema";
+async function ensureVoiceCloned(voice){
+  if(!voice?.blob){
+    throw new Error("No se encontró la muestra de voz.");
+  }
 
-  setImageStatus(
-    `🔊 Reproduciendo con ${voiceName}.`
+  /*
+    Si esta voz ya tiene voice_id,
+    no volvemos a crearla.
+  */
+  if(voice.voice_id){
+    return voice.voice_id;
+  }
+
+  setVoiceMessage("🎙️ Preparando la voz "+voice.name+"...");
+
+  const audioBase64=await blobToDataURL(voice.blob);
+
+  const response=await fetch(
+    BACKEND+"/api/voice/clone",
+    {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        audioBase64,
+        name:voice.name
+      })
+    }
   );
 
-  const u =
-    new SpeechSynthesisUtterance(text);
+  const data=await response.json();
 
-  const v =
-    speechSynthesis.getVoices();
+  if(!response.ok || !data.ok){
+    throw new Error(
+      data.error ||
+      "No se pudo preparar la voz personalizada."
+    );
+  }
 
-  u.voice =
-    v.find(x =>
-      x.lang
-        ?.toLowerCase()
-        .startsWith("es")
-    ) || v[0];
+  /*
+    Guardamos el voice_id dentro de IndexedDB.
+    Así no se vuelve a clonar la misma voz
+    cada vez que presionemos ESCUCHAR.
+  */
+  voice.voice_id=data.voice_id;
 
-  u.rate = +$("rate").value;
-  u.pitch = +$("pitch").value;
+  await put(voice);
 
-  speechSynthesis.speak(u);
-};
+  return data.voice_id;
+}
 
-$("stop").onclick = () => {
-  speechSynthesis.cancel();
+function setVoiceMessage(text){
+  const el=$("imageStatus");
+  if(el)el.textContent=text;
+}
+
+async function generateCustomVoice(){
+
+  if(generatingAudio)return;
+
+  const text=$("script").value.trim();
+
+  if(!text){
+    alert("Primero genera o escribe un guion.");
+    return;
+  }
+
+  if(!selectedVoiceId){
+    alert("Primero selecciona una voz personalizada.");
+    return;
+  }
+
+  generatingAudio=true;
+
+  stopCustomAudio();
+
+  $("speak").textContent="⏳ GENERANDO AUDIO...";
+  $("speak").disabled=true;
+
+  try{
+
+    const voices=await all();
+
+    const voice=voices.find(
+      v=>v.id===selectedVoiceId
+    );
+
+    if(!voice){
+      throw new Error(
+        "La voz seleccionada ya no está disponible."
+      );
+    }
+
+    /*
+      Primera vez:
+      convierte la muestra R en una voz de IA
+      y obtiene su voice_id.
+    */
+    const voiceId=
+      await ensureVoiceCloned(voice);
+
+    setVoiceMessage(
+      "🎙️ Generando el anuncio con la voz "+voice.name+"..."
+    );
+
+    const response=await fetch(
+      BACKEND+"/api/voice/generate",
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          text,
+          voice_id:voiceId,
+          rate:+$("rate").value,
+          pitch:+$("pitch").value
+        })
+      }
+    );
+
+    if(!response.ok){
+
+      let message="No se pudo generar el audio.";
+
+      try{
+        const data=await response.json();
+        message=data.error||message;
+      }catch{}
+
+      throw new Error(message);
+    }
+
+    const audioBlob=
+      await response.blob();
+
+    if(!audioBlob.size){
+      throw new Error(
+        "El servidor devolvió un audio vacío."
+      );
+    }
+
+    const audioURL=
+      URL.createObjectURL(audioBlob);
+
+    currentAudio=
+      new Audio(audioURL);
+
+    currentAudio.onended=()=>{
+      URL.revokeObjectURL(audioURL);
+      currentAudio=null;
+      $("speak").disabled=false;
+      $("speak").textContent="🔊 ESCUCHAR";
+    };
+
+    currentAudio.onerror=()=>{
+      URL.revokeObjectURL(audioURL);
+      currentAudio=null;
+      $("speak").disabled=false;
+      $("speak").textContent="🔊 ESCUCHAR";
+      alert("No se pudo reproducir el audio generado.");
+    };
+
+    await currentAudio.play();
+
+    setVoiceMessage(
+      "✅ Reproduciendo con la voz "+voice.name
+    );
+
+  }catch(error){
+
+    console.error(error);
+
+    alert(
+      error.message ||
+      "No se pudo generar el audio."
+    );
+
+    $("speak").disabled=false;
+    $("speak").textContent="🔊 ESCUCHAR";
+
+  }finally{
+    generatingAudio=false;
+  }
+}
+
+$("speak").onclick=generateCustomVoice;
+
+$("stop").onclick=()=>{
+  stopCustomAudio();
+
+  $("speak").disabled=false;
+  $("speak").textContent="🔊 ESCUCHAR";
 };
 
 $("copy").onclick = async () => {
