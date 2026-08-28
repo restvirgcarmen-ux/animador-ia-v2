@@ -710,7 +710,6 @@ let processorNode = null;
 let recordedSamples = [];
 
 let recordedSampleRate = 44100;
-let voicePreviewUrls = new Set();
 
 
 /* =========================================================
@@ -853,6 +852,25 @@ function escapeHtml(value) {
    GUARDAR ARCHIVO DE VOZ
 ========================================================= */
 
+async function normalizeAudioBlob(blob) {
+  if (!blob || !blob.size) throw Error("El archivo de audio está vacío.");
+  if ((blob.type || "").toLowerCase().includes("wav")) return blob;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const mono = new Float32Array(buffer.length);
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < buffer.length; i++) mono[i] += data[i] / buffer.numberOfChannels;
+    }
+    const wav = encodeWav(mono, buffer.sampleRate);
+    try { await ctx.close(); } catch {}
+    return wav;
+  } catch {
+    return blob;
+  }
+}
+
 async function saveVoiceBlob(
   blob,
   name,
@@ -866,30 +884,14 @@ async function saveVoiceBlob(
     );
   }
 
+  const safeBlob = await normalizeAudioBlob(blob);
+
   const voice = {
-
-    id:
-      id ||
-      crypto.randomUUID(),
-
-    name:
-      name || "Mi voz",
-
-    blob: new Blob(
-      [blob],
-      {
-        type:
-          blob.type ||
-          "audio/wav"
-      }
-    ),
-
-    date:
-      Date.now(),
-
-    mime:
-      blob.type ||
-      "audio/wav"
+    id: id || crypto.randomUUID(),
+    name: name || "Mi voz",
+    blob: safeBlob,
+    date: Date.now(),
+    mime: safeBlob.type || "audio/wav"
   };
 
   /*
@@ -1043,56 +1045,19 @@ async function render() {
     `;
 
 
-    const audio =
-      div.querySelector("audio");
+    const audio = div.querySelector("audio");
 
-    if (
-      !active &&
-      !preparingThis
-    ) {
+    if (!active && !preparingThis) {
       try {
-        const playableBlob =
-          new Blob(
-            [voice.blob],
-            {
-              type:
-                voice.mime ||
-                voice.blob?.type ||
-                "audio/wav"
-            }
-          );
-
-        const audioUrl =
-          URL.createObjectURL(
-            playableBlob
-          );
-
-        voicePreviewUrls.add(audioUrl);
-        audio.src = audioUrl;
-        audio.preload = "metadata";
-        audio.volume = 1;
+        audio.preload = "auto";
         audio.muted = false;
+        audio.volume = 1;
+        audio.src = URL.createObjectURL(voice.blob);
         audio.load();
-
-        audio.addEventListener(
-          "error",
-          () => {
-            console.error(
-              "No se pudo reproducir la muestra:",
-              voice.name,
-              voice.mime || voice.blob?.type
-            );
-          },
-          { once: true }
-        );
       } catch (error) {
-        console.error(
-          "Error preparando la muestra:",
-          error
-        );
+        console.error("No se pudo preparar la muestra para reproducir:", error);
       }
     }
-
 
     element.appendChild(div);
   });
@@ -1311,6 +1276,12 @@ $("addVoice").onclick =
 ========================================================= */
 
 function cleanupAudio() {
+  try {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  } catch {}
+  mediaRecorder = null;
+  recordedChunks = [];
+
 
   try {
     sourceNode?.disconnect();
@@ -1560,90 +1531,38 @@ function encodeWav(
    DETENER GRABACIÓN
 ========================================================= */
 
+let mediaRecorder = null;
+let recordedChunks = [];
+
 async function stopRecording() {
+  if (!recording || !mediaRecorder) return;
 
-  if (
-    !recording ||
-    !audioCtx
-  ) {
-    return;
-  }
-
-
-  $("status").textContent =
-    "⏳ Procesando la grabación...";
-
-
-  $("record").textContent =
-    "⏳ GUARDANDO...";
-
-
+  $("status").textContent = "⏳ Procesando la grabación...";
+  $("record").textContent = "⏳ GUARDANDO...";
   recording = false;
 
-
   try {
+    const blob = await new Promise((resolve, reject) => {
+      const mr = mediaRecorder;
+      mr.onstop = () => resolve(new Blob(recordedChunks, { type: mr.mimeType || "audio/webm" }));
+      mr.onerror = e => reject(e.error || new Error("Error al grabar el audio."));
+      try { mr.stop(); } catch (e) { reject(e); }
+    });
 
-    const samples =
-      mergeFloat32(
-        recordedSamples
-      );
-
-
-    const blob =
-      encodeWav(
-        samples,
-        recordedSampleRate
-      );
-
-
+    mediaRecorder = null;
+    recordedChunks = [];
     cleanupAudio();
 
-    recordedSamples = [];
+    if (!blob.size) throw Error("La grabación está vacía.");
 
-
-    if (
-      !blob.size ||
-      samples.length < 1000
-    ) {
-
-      throw Error(
-        "La grabación está vacía o es demasiado corta."
-      );
-    }
-
-
-    await saveVoiceBlob(
-      blob,
-      $("voiceName")
-        .value
-        .trim(),
-      editing
-    );
-
-
-    $("status").textContent =
-      "✅ Muestra guardada correctamente.";
-
-
-    $("recorder").hidden =
-      true;
-
-
+    await saveVoiceBlob(blob, $("voiceName").value.trim(), editing);
+    $("status").textContent = "✅ Muestra guardada correctamente.";
+    $("recorder").hidden = true;
   } catch (error) {
-
+    mediaRecorder = null;
+    recordedChunks = [];
     cleanupAudio();
-
-    recordedSamples = [];
-
-
-    $("status").textContent =
-      "❌ No se pudo guardar la grabación: " +
-      (
-        error.message ||
-        "error"
-      );
-
-
+    $("status").textContent = "❌ No se pudo guardar la grabación: " + (error.message || "error");
     await render();
   }
 }
@@ -1653,225 +1572,69 @@ async function stopRecording() {
    GRABAR
 ========================================================= */
 
-$("record").onclick =
-  async () => {
+$("record").onclick = async () => {
+  if (recording) { await stopRecording(); return; }
+  if (preparing) return;
 
-    if (recording) {
+  if (!$("consent").checked) {
+    $("status").textContent = "Marca la autorización primero.";
+    return;
+  }
 
-      await stopRecording();
+  const name = $("voiceName").value.trim();
+  if (!name) {
+    $("status").textContent = "Escribe un nombre para la voz.";
+    return;
+  }
 
-      return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    $("status").textContent = "Este navegador no permite grabar audio directamente.";
+    return;
+  }
+
+  try {
+    preparing = true;
+    $("status").textContent = "🎙️ Solicitando permiso para usar el micrófono...";
+    $("record").textContent = "⏳ PREPARANDO...";
+    await render();
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+
+    const preferred = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4"
+    ].find(t => MediaRecorder.isTypeSupported(t));
+
+    mediaRecorder = preferred ? new MediaRecorder(stream, { mimeType: preferred }) : new MediaRecorder(stream);
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.start(250);
+
+    preparing = false;
+    recording = true;
+    await render();
+    $("record").textContent = "⏹ DETENER GRABACIÓN";
+    $("status").textContent = "🔴 Grabando... Habla ahora.";
+  } catch (error) {
+    preparing = false;
+    recording = false;
+    mediaRecorder = null;
+    recordedChunks = [];
+    cleanupAudio();
+    $("record").textContent = "🎙️ GRABAR MUESTRA";
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+      $("status").textContent = "❌ El micrófono no fue autorizado. Revisa el permiso de micrófono del navegador para esta página.";
+    } else if (error?.name === "NotFoundError") {
+      $("status").textContent = "❌ No se encontró un micrófono disponible.";
+    } else {
+      $("status").textContent = "❌ No se pudo acceder al micrófono: " + (error.message || "error");
     }
-
-
-    if (preparing) {
-      return;
-    }
-
-
-    if (!$("consent").checked) {
-
-      $("status").textContent =
-        "Marca la autorización primero.";
-
-      return;
-    }
-
-
-    const name =
-      $("voiceName")
-        .value
-        .trim();
-
-
-    if (!name) {
-
-      $("status").textContent =
-        "Escribe un nombre para la voz.";
-
-      return;
-    }
-
-
-    if (
-      !navigator.mediaDevices?.getUserMedia
-    ) {
-
-      $("status").textContent =
-        "Este navegador no permite acceder al micrófono.";
-
-      return;
-    }
-
-
-    try {
-
-      preparing = true;
-
-
-      $("status").textContent =
-        "🎙️ Solicitando permiso para usar el micrófono...";
-
-
-      $("record").textContent =
-        "⏳ PREPARANDO...";
-
-
-      await render();
-
-
-      stream =
-        await navigator.mediaDevices
-          .getUserMedia({
-            audio: {
-              channelCount: 1,
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          });
-
-
-      audioCtx =
-        new (
-          window.AudioContext ||
-          window.webkitAudioContext
-        )();
-
-
-      if (
-        audioCtx.state ===
-        "suspended"
-      ) {
-
-        await audioCtx.resume();
-      }
-
-
-      recordedSampleRate =
-        audioCtx.sampleRate;
-
-
-      sourceNode =
-        audioCtx.createMediaStreamSource(
-          stream
-        );
-
-
-      processorNode =
-        audioCtx.createScriptProcessor(
-          4096,
-          1,
-          1
-        );
-
-
-      recordedSamples = [];
-
-
-      processorNode.onaudioprocess =
-        event => {
-
-          if (!recording) {
-            return;
-          }
-
-
-          recordedSamples.push(
-            new Float32Array(
-              event.inputBuffer
-                .getChannelData(0)
-            )
-          );
-        };
-
-
-      const silentGain =
-        audioCtx.createGain();
-
-
-      silentGain.gain.value =
-        0;
-
-
-      sourceNode.connect(
-        processorNode
-      );
-
-
-      processorNode.connect(
-        silentGain
-      );
-
-
-      silentGain.connect(
-        audioCtx.destination
-      );
-
-
-      preparing = false;
-
-      recording = true;
-
-
-      await render();
-
-
-      $("record").textContent =
-        "⏹ DETENER GRABACIÓN";
-
-
-      $("status").textContent =
-        "🔴 Grabando... Habla ahora.";
-
-
-    } catch (error) {
-
-      preparing = false;
-
-      recording = false;
-
-      cleanupAudio();
-
-      recordedSamples = [];
-
-
-      $("record").textContent =
-        "🎙️ GRABAR MUESTRA";
-
-
-      if (
-        error?.name ===
-          "NotAllowedError" ||
-        error?.name ===
-          "PermissionDeniedError"
-      ) {
-
-        $("status").textContent =
-          "❌ El micrófono no fue autorizado. Revisa el permiso de micrófono del navegador para esta página.";
-
-      } else if (
-        error?.name ===
-        "NotFoundError"
-      ) {
-
-        $("status").textContent =
-          "❌ No se encontró un micrófono disponible.";
-
-      } else {
-
-        $("status").textContent =
-          "❌ No se pudo acceder al micrófono: " +
-          (
-            error.message ||
-            "error"
-          );
-      }
-
-
-      await render();
-    }
-  };
+    await render();
+  }
+};
 
 
 /* =========================================================
