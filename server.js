@@ -270,10 +270,27 @@ app.post("/api/voice/clone", async (req, res) => {
       String(name).trim() || "Mi voz"
     );
 
+    const extensionByMime = {
+      "audio/wav": "wav",
+      "audio/wave": "wav",
+      "audio/x-wav": "wav",
+      "audio/mpeg": "mp3",
+      "audio/mp3": "mp3",
+      "audio/mp4": "m4a",
+      "audio/x-m4a": "m4a",
+      "audio/webm": "webm",
+      "audio/ogg": "ogg",
+      "audio/aac": "aac"
+    };
+
+    const extension =
+      extensionByMime[mime] ||
+      "audio";
+
     form.append(
       "files[]",
       blob,
-      "voice-sample.wav"
+      `voice-sample.${extension}`
     );
 
     const response = await fetch(

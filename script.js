@@ -710,6 +710,7 @@ let processorNode = null;
 let recordedSamples = [];
 
 let recordedSampleRate = 44100;
+let voicePreviewUrls = new Set();
 
 
 /* =========================================================
@@ -874,7 +875,14 @@ async function saveVoiceBlob(
     name:
       name || "Mi voz",
 
-    blob,
+    blob: new Blob(
+      [blob],
+      {
+        type:
+          blob.type ||
+          "audio/wav"
+      }
+    ),
 
     date:
       Date.now(),
@@ -1038,20 +1046,51 @@ async function render() {
     const audio =
       div.querySelector("audio");
 
-
     if (
       !active &&
       !preparingThis
     ) {
-
       try {
-
-        audio.src =
-          URL.createObjectURL(
-            voice.blob
+        const playableBlob =
+          new Blob(
+            [voice.blob],
+            {
+              type:
+                voice.mime ||
+                voice.blob?.type ||
+                "audio/wav"
+            }
           );
 
-      } catch {}
+        const audioUrl =
+          URL.createObjectURL(
+            playableBlob
+          );
+
+        voicePreviewUrls.add(audioUrl);
+        audio.src = audioUrl;
+        audio.preload = "metadata";
+        audio.volume = 1;
+        audio.muted = false;
+        audio.load();
+
+        audio.addEventListener(
+          "error",
+          () => {
+            console.error(
+              "No se pudo reproducir la muestra:",
+              voice.name,
+              voice.mime || voice.blob?.type
+            );
+          },
+          { once: true }
+        );
+      } catch (error) {
+        console.error(
+          "Error preparando la muestra:",
+          error
+        );
+      }
     }
 
 
