@@ -490,8 +490,7 @@ async function generateCustomVoice() {
 
     if (!response.ok) {
 
-  let message =
-    "No se pudo generar el audio.";
+  let message = "No se pudo generar el audio.";
 
   try {
 
@@ -522,6 +521,15 @@ async function generateCustomVoice() {
     }
 
   } catch (error) {
+
+    console.error(
+      "Error leyendo respuesta:",
+      error
+    );
+  }
+
+  throw new Error(message);
+    }
 
     console.error(
       "Error leyendo respuesta:",
