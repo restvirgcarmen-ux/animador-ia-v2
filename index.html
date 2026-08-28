@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Animador IA</title><link rel="stylesheet" href="style.css">
+</head>
+<body><main>
+<header><h1>🎙️ ANIMADOR <span>IA</span></h1><p>Crea anuncios con voz de animador</p></header>
+
+<section>
+  <div class="announce-head"><label for="brief">¿Qué quieres anunciar?</label><span id="sourceHint">Texto o imagen</span></div>
+  <div class="announce-grid">
+    <div>
+      <textarea id="brief" rows="8" placeholder="Escribe aquí los datos del evento, promoción o anuncio...\n\nSi prefieres, deja este espacio vacío y sube una imagen publicitaria."></textarea>
+      <div class="image-actions">
+        <label class="upload-btn" for="imageInput">📤 SUBIR IMAGEN</label>
+        <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+        <button id="removeImage" class="secondary" hidden>✖ Quitar imagen</button>
+      </div>
+    </div>
+    <div class="image-box" id="imageBox">
+      <div id="imageEmpty">🖼️<br><small>Vista previa 9:16</small></div>
+      <img id="imagePreview" alt="Vista previa de la publicidad" hidden>
+    </div>
+  </div>
+  <div class="grid"><div><label>🎤 Estilo</label><select id="style"><option value="animador">Animador alegre</option><option value="fiesta">Fiesta / explosivo</option><option value="comercial">Locutor comercial</option><option value="orquesta">Presentación de orquesta</option></select></div><div><label>⚡ Energía</label><select id="energy"><option>Suave</option><option selected>Media</option><option>Explosiva</option></select></div></div>
+  <button id="generate">✨ GENERAR TEXTO</button>
+  <p id="imageStatus" class="status"></p>
+</section>
+
+<section><h2>📝 Guion</h2><textarea id="script" rows="10" placeholder="Aquí aparecerá el guion..."></textarea><div><button id="speak">🔊 ESCUCHAR</button><button id="stop">⏹ DETENER</button><button id="copy">Copiar</button></div></section>
+
+<section><h2>🎙️ Mis voces personalizadas</h2><p>Las muestras se guardan localmente en este navegador. Puedes grabar una voz o subir un archivo de audio autorizado.</p><div id="voices"></div><button id="addVoice">＋ AGREGAR NUEVA VOZ</button>
+<div id="recorder" hidden><h3 id="recTitle">Nueva voz</h3><input id="voiceName" placeholder="Nombre de la voz"><div class="consent-row"><input id="consent" type="checkbox"><span>Confirmo que tengo autorización del titular de esta voz para utilizarla.</span></div><div class="voice-inputs"><button id="record">🎙️ GRABAR MUESTRA</button><label class="upload-audio" for="audioInput">📁 SUBIR ARCHIVO DE VOZ</label><input id="audioInput" type="file" accept="audio/*" hidden></div><button id="cancel">Cancelar</button><p id="status">Listo</p></div></section>
+
+<section><h2>🎚️ Voz</h2><label>Velocidad <input id="rate" type="range" min=".7" max="1.35" step=".05" value="1"><span id="rv">1.00x</span></label><label>Tono <input id="pitch" type="range" min=".6" max="1.4" step=".05" value=".9"><span id="pv">0.90</span></label></section>
+
+<footer>Animador IA · V4</footer>
+</main><script src="script.js"></script></body></html>
