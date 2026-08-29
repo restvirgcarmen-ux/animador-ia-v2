@@ -14,7 +14,7 @@ const ELEVENLABS_MODEL =
   process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
 
 app.use(cors());
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "20mb" }));
 
 app.get("/", (req, res) => {
   res.json({
