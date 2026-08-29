@@ -7,17 +7,14 @@ const templates = {
     "¡ATENCIÓN, ATENCIÓN, SEÑORES Y SEÑORAS!",
     "¡No te lo puedes perder! ¡Te esperamos!"
   ],
-
   fiesta: [
     "¡¡¡PREPÁRATE PARA LA FIESTA!!!",
     "¡¡¡QUE EMPIECE LA FIESTA!!!"
   ],
-
   comercial: [
     "Atención a todos nuestros amigos y clientes.",
     "Los esperamos. ¡No faltes!"
   ],
-
   orquesta: [
     "¡Señoras y señores, amantes de la buena música!",
     "¡Recibamos este gran espectáculo con un fuerte aplauso!"
@@ -26,42 +23,71 @@ const templates = {
 
 let selectedImage = null;
 
+// ======================================================
+// VOZ PERSONALIZADA SELECCIONADA
+// ======================================================
 
-/* =========================================================
-   GUIONES
-========================================================= */
+let selectedVoiceId =
+  localStorage.getItem("animadorIA_selectedVoice") || null;
 
-function fallbackScript(brief, style, energy) {
+function getSelectedVoiceId() {
+  return selectedVoiceId;
+}
 
-  let text = brief;
+function setSelectedVoice(id) {
+  selectedVoiceId = id;
+
+  if (id) {
+    localStorage.setItem(
+      "animadorIA_selectedVoice",
+      id
+    );
+  } else {
+    localStorage.removeItem(
+      "animadorIA_selectedVoice"
+    );
+  }
+}
+
+// ======================================================
+// GUIÓN
+// ======================================================
+
+function fallbackScript(b, style, energy) {
+  let t = b;
   const s = templates[style] || templates.animador;
 
   if (energy === "Explosiva") {
-    text = text.replace(/[.,]/g, "!!!");
+    t = t.replace(/[.,]/g, "!!!");
   } else if (energy === "Media") {
-    text = text.replace(/\./g, "!");
+    t = t.replace(/\./g, "!");
   }
 
-  return `${s[0]}\n\n${text}\n\n${s[1]}`;
+  return `${s[0]}
+
+${t}
+
+${s[1]}`;
 }
 
-
-/* =========================================================
-   IMAGEN
-========================================================= */
+// ======================================================
+// IMAGEN
+// ======================================================
 
 $("imageInput").onchange = e => {
+  const f = e.target.files?.[0];
 
-  const file = e.target.files?.[0];
+  if (!f) return;
 
-  if (!file) return;
-
-  if (!file.type.startsWith("image/")) {
-    setImageStatus("Selecciona una imagen válida.", true);
+  if (!f.type.startsWith("image/")) {
+    setImageStatus(
+      "Selecciona una imagen válida.",
+      true
+    );
     return;
   }
 
-  if (file.size > 8 * 1024 * 1024) {
+  if (f.size > 8 * 1024 * 1024) {
     setImageStatus(
       "La imagen supera 8 MB. Elige una más pequeña.",
       true
@@ -69,11 +95,11 @@ $("imageInput").onchange = e => {
     return;
   }
 
-  selectedImage = file;
+  selectedImage = f;
 
-  const url = URL.createObjectURL(file);
+  const u = URL.createObjectURL(f);
 
-  $("imagePreview").src = url;
+  $("imagePreview").src = u;
   $("imagePreview").hidden = false;
   $("imageEmpty").hidden = true;
   $("removeImage").hidden = false;
@@ -83,65 +109,47 @@ $("imageInput").onchange = e => {
   );
 };
 
-
 $("removeImage").onclick = () => {
-
   selectedImage = null;
 
   $("imageInput").value = "";
-
   $("imagePreview").hidden = true;
   $("imagePreview").removeAttribute("src");
-
   $("imageEmpty").hidden = false;
   $("removeImage").hidden = true;
 
   setImageStatus("");
 };
 
-
-function setImageStatus(text, error = false) {
-
-  const el = $("imageStatus");
-
-  if (!el) return;
-
-  el.textContent = text;
-
-  el.className =
+function setImageStatus(t, error = false) {
+  $("imageStatus").textContent = t;
+  $("imageStatus").className =
     "status " + (error ? "error" : "success");
 }
 
-
 function fileToDataURL(file) {
-
   return new Promise((resolve, reject) => {
+    const r = new FileReader();
 
-    const reader = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
 
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-
-    reader.readAsDataURL(file);
+    r.readAsDataURL(file);
   });
 }
 
-
-/* =========================================================
-   GENERAR GUIÓN
-========================================================= */
+// ======================================================
+// GENERAR GUIÓN
+// ======================================================
 
 $("generate").onclick = async () => {
-
-  const brief = $("brief").value.trim();
+  const b = $("brief").value.trim();
   const style = $("style").value;
   const energy = $("energy").value.toLowerCase();
 
-  if (!brief && !selectedImage) {
-
+  if (!b && !selectedImage) {
     $("script").value =
       "Escribe los datos del anuncio o sube una imagen publicitaria.";
-
     return;
   }
 
@@ -149,12 +157,9 @@ $("generate").onclick = async () => {
   setImageStatus("");
 
   try {
+    let r, d;
 
-    let response;
-    let data;
-
-    if (selectedImage && !brief) {
-
+    if (selectedImage && !b) {
       const dataUrl =
         await fileToDataURL(selectedImage);
 
@@ -162,15 +167,14 @@ $("generate").onclick = async () => {
         "🖼️ Analizando la publicidad..."
       );
 
-      response = await fetch(
-        BACKEND + "/api/generate-script-from-image",
+      r = await fetch(
+        BACKEND +
+          "/api/generate-script-from-image",
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json"
           },
-
           body: JSON.stringify({
             image: dataUrl,
             style,
@@ -178,20 +182,16 @@ $("generate").onclick = async () => {
           })
         }
       );
-
     } else {
-
-      response = await fetch(
+      r = await fetch(
         BACKEND + "/api/generate-script",
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json"
           },
-
           body: JSON.stringify({
-            brief,
+            brief: b,
             style,
             energy
           })
@@ -199,33 +199,33 @@ $("generate").onclick = async () => {
       );
     }
 
-    data = await response.json();
+    d = await r.json();
 
-    if (!response.ok || !data.ok) {
+    if (!r.ok || !d.ok) {
       throw Error(
-        data.error ||
-        "No se pudo generar el guion."
+        d.error ||
+          "No se pudo generar el guion."
       );
     }
 
-    $("script").value = data.script;
+    $("script").value = d.script;
 
     setImageStatus(
-      selectedImage && !brief
+      selectedImage && !b
         ? "✅ Guion generado a partir de la imagen."
         : ""
     );
 
-  } catch (error) {
+  } catch (e) {
 
-    if (selectedImage && !brief) {
+    if (selectedImage && !b) {
 
       $("script").value =
         "No se pudo analizar la imagen todavía. Revisa que el backend tenga configurada su clave de IA.\n\nTambién puedes escribir los datos manualmente para generar el guion.";
 
       setImageStatus(
-        error.message ||
-        "Error al analizar la imagen.",
+        e.message ||
+          "Error al analizar la imagen.",
         true
       );
 
@@ -233,7 +233,7 @@ $("generate").onclick = async () => {
 
       $("script").value =
         fallbackScript(
-          brief,
+          b,
           style,
           $("energy").value
         );
@@ -241,554 +241,183 @@ $("generate").onclick = async () => {
   }
 };
 
+// ======================================================
+// ESCUCHAR
+// ======================================================
+//
+// POR AHORA sigue usando la voz del sistema.
+// En el siguiente paso conectaremos la voz personalizada
+// seleccionada con el backend.
+// ======================================================
 
-/* =========================================================
-   VOZ PERSONALIZADA
-========================================================= */
+$("speak").onclick = () => {
 
-let selectedVoiceId =
-  localStorage.getItem("animadorSelectedVoice") || null;
-
-let currentAudio = null;
-
-let generatingAudio = false;
-
-
-/* =========================================================
-   DETENER AUDIO
-========================================================= */
-
-function stopCustomAudio() {
-
-  if (currentAudio) {
-
-    try {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-    } catch {}
-
-    try {
-      if (currentAudio.src) {
-        URL.revokeObjectURL(currentAudio.src);
-      }
-    } catch {}
-
-    currentAudio = null;
-  }
-}
-
-
-/* =========================================================
-   MENSAJE DE VOZ
-========================================================= */
-
-function setVoiceMessage(text) {
-
-  /*
-    Usamos imageStatus solamente como indicador general
-    si no existe un elemento específico para voz.
-  */
-
-  const el = $("imageStatus");
-
-  if (el) {
-    el.textContent = text;
-    el.className = "status success";
-  }
-}
-
-
-/* =========================================================
-   CONVERTIR AUDIO A BASE64
-========================================================= */
-
-async function blobToDataURL(blob) {
-
-  return new Promise((resolve, reject) => {
-
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-
-    reader.readAsDataURL(blob);
-  });
-}
-
-
-/* =========================================================
-   PREPARAR / CLONAR VOZ
-========================================================= */
-
-async function ensureVoiceCloned(voice) {
-
-  if (!voice || !voice.blob) {
-    throw new Error(
-      "No se encontró la muestra de voz."
-    );
-  }
-
-  /*
-    Si la voz ya tiene voice_id,
-    no volvemos a crearla.
-  */
-
-  if (voice.voice_id) {
-    return voice.voice_id;
-  }
-
-  setVoiceMessage(
-    "🎙️ Preparando la voz " +
-    voice.name +
-    "..."
-  );
-
-  const audioBase64 =
-    await blobToDataURL(voice.blob);
-
-  const response = await fetch(
-    BACKEND + "/api/voice/clone",
-    {
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-        audioBase64,
-        name: voice.name
-      })
-    }
-  );
-
-  const data =
-    await response.json();
-
-  if (!response.ok || !data.ok) {
-
-    throw new Error(
-      data.error ||
-      "No se pudo preparar la voz personalizada."
-    );
-  }
-
-  if (!data.voice_id) {
-
-    throw new Error(
-      "El servidor no devolvió el identificador de la voz."
-    );
-  }
-
-  /*
-    Guardamos el voice_id dentro de IndexedDB.
-    Así no necesitamos volver a crear la voz.
-  */
-
-  voice.voice_id =
-    data.voice_id;
-
-  await put(voice);
-
-  return data.voice_id;
-}
-
-
-/* =========================================================
-   GENERAR AUDIO CON LA VOZ SELECCIONADA
-========================================================= */
-
-async function generateCustomVoice() {
-
-  if (generatingAudio) return;
+  speechSynthesis.cancel();
 
   const text =
     $("script").value.trim();
 
-  if (!text) {
+  if (!text) return;
 
-    alert(
-      "Primero genera o escribe un guion."
-    );
+  const voiceName =
+    selectedVoiceId
+      ? "Voz personalizada seleccionada"
+      : "voz del sistema";
 
-    return;
-  }
+  setImageStatus(
+    `🔊 Reproduciendo con ${voiceName}.`
+  );
 
-  if (!selectedVoiceId) {
+  const u =
+    new SpeechSynthesisUtterance(text);
 
-    alert(
-      "Primero selecciona una voz personalizada."
-    );
+  const v =
+    speechSynthesis.getVoices();
 
-    return;
-  }
+  u.voice =
+    v.find(x =>
+      x.lang
+        ?.toLowerCase()
+        .startsWith("es")
+    ) || v[0];
 
-  generatingAudio = true;
+  u.rate = +$("rate").value;
+  u.pitch = +$("pitch").value;
 
-  stopCustomAudio();
-
-  $("speak").textContent =
-    "⏳ GENERANDO AUDIO...";
-
-  $("speak").disabled = true;
-
-  try {
-
-    const voices =
-      await all();
-
-    const voice =
-      voices.find(
-        v => v.id === selectedVoiceId
-      );
-
-    if (!voice) {
-
-      throw new Error(
-        "La voz seleccionada ya no está disponible."
-      );
-    }
-
-    /*
-      Primera vez:
-      se prepara la voz R y se obtiene
-      su voice_id.
-    */
-
-    const voiceId =
-      await ensureVoiceCloned(voice);
-
-    setVoiceMessage(
-      "🎙️ Generando el anuncio con la voz " +
-      voice.name +
-      "..."
-    );
-
-    const response =
-      await fetch(
-        BACKEND + "/api/voice/generate",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json"
-          },
-
-          body: JSON.stringify({
-            text,
-
-            voice_id: voiceId,
-
-            rate:
-              +$("rate").value,
-
-            pitch:
-              +$("pitch").value
-          })
-        }
-      );
-
-    if (!response.ok) {
-
-      let message =
-        "No se pudo generar el audio.";
-
-      try {
-
-        const data =
-          await response.json();
-
-        message =
-          data.error ||
-          message;
-
-      } catch {}
-
-      throw new Error(message);
-    }
-
-    const audioBlob =
-      await response.blob();
-
-    if (!audioBlob.size) {
-
-      throw new Error(
-        "El servidor devolvió un audio vacío."
-      );
-    }
-
-    const audioURL =
-      URL.createObjectURL(
-        audioBlob
-      );
-
-    currentAudio =
-      new Audio(audioURL);
-
-    currentAudio.preload = "auto";
-
-    currentAudio.onended = () => {
-
-      try {
-        URL.revokeObjectURL(audioURL);
-      } catch {}
-
-      currentAudio = null;
-
-      $("speak").disabled = false;
-
-      $("speak").textContent =
-        "🔊 ESCUCHAR";
-    };
-
-    currentAudio.onerror = () => {
-
-      try {
-        URL.revokeObjectURL(audioURL);
-      } catch {}
-
-      currentAudio = null;
-
-      $("speak").disabled = false;
-
-      $("speak").textContent =
-        "🔊 ESCUCHAR";
-
-      alert(
-        "No se pudo reproducir el audio generado."
-      );
-    };
-
-    await currentAudio.play();
-
-    setVoiceMessage(
-      "✅ Reproduciendo con la voz " +
-      voice.name
-    );
-
-  } catch (error) {
-
-    console.error(
-      "ERROR DE VOZ:",
-      error
-    );
-
-    alert(
-      error.message ||
-      "No se pudo generar el audio."
-    );
-
-    $("speak").disabled = false;
-
-    $("speak").textContent =
-      "🔊 ESCUCHAR";
-
-  } finally {
-
-    generatingAudio = false;
-  }
-}
-
-
-/* =========================================================
-   BOTONES ESCUCHAR / DETENER
-========================================================= */
-
-$("speak").onclick =
-  generateCustomVoice;
-
-
-$("stop").onclick = () => {
-
-  stopCustomAudio();
-
-  $("speak").disabled = false;
-
-  $("speak").textContent =
-    "🔊 ESCUCHAR";
+  speechSynthesis.speak(u);
 };
 
-
-/* =========================================================
-   COPIAR
-========================================================= */
+$("stop").onclick = () => {
+  speechSynthesis.cancel();
+};
 
 $("copy").onclick = async () => {
 
-  try {
+  await navigator.clipboard.writeText(
+    $("script").value
+  );
 
-    await navigator.clipboard.writeText(
-      $("script").value
-    );
+  $("copy").textContent =
+    "¡Copiado!";
 
+  setTimeout(() => {
     $("copy").textContent =
-      "¡Copiado!";
-
-    setTimeout(() => {
-
-      $("copy").textContent =
-        "Copiar";
-
-    }, 1200);
-
-  } catch {
-
-    alert(
-      "No se pudo copiar el guion."
-    );
-  }
+      "Copiar";
+  }, 1200);
 };
 
-
-/* =========================================================
-   VELOCIDAD Y TONO
-========================================================= */
+// ======================================================
+// VELOCIDAD / TONO
+// ======================================================
 
 $("rate").oninput = () => {
-
   $("rv").textContent =
     (+$("rate").value).toFixed(2) +
     "x";
 };
 
-
 $("pitch").oninput = () => {
-
   $("pv").textContent =
     (+$("pitch").value).toFixed(2);
 };
 
-
-/* =========================================================
-   INDEXEDDB — VOCES
-========================================================= */
+// ======================================================
+// BASE DE DATOS DE VOCES
+// ======================================================
 
 let db;
-
 let rec;
-
 let stream;
-
 let ch = [];
-
 let editing = null;
 
 let recording = false;
-
 let preparing = false;
 
 let audioCtx = null;
-
 let sourceNode = null;
-
 let processorNode = null;
 
 let recordedSamples = [];
-
 let recordedSampleRate = 44100;
 
-
-/* =========================================================
-   ABRIR BASE DE DATOS
-========================================================= */
+// ======================================================
+// INDEXED DB
+// ======================================================
 
 function openDB() {
+  return new Promise((ok, no) => {
 
-  return new Promise((resolve, reject) => {
-
-    const request =
+    const r =
       indexedDB.open(
         "AnimadorIA",
         1
       );
 
-    request.onupgradeneeded = () => {
+    r.onupgradeneeded = () => {
 
       if (
-        !request.result.objectStoreNames.contains(
-          "voices"
-        )
+        !r.result.objectStoreNames
+          .contains("voices")
       ) {
 
-        request.result.createObjectStore(
+        r.result.createObjectStore(
           "voices",
-          {
-            keyPath: "id"
-          }
+          { keyPath: "id" }
         );
       }
     };
 
-    request.onsuccess = () => {
-
-      db = request.result;
-
-      resolve();
+    r.onsuccess = () => {
+      db = r.result;
+      ok();
     };
 
-    request.onerror = () =>
-      reject(request.error);
+    r.onerror = () =>
+      no(r.error);
   });
 }
 
-
-/* =========================================================
-   OBTENER VOCES
-========================================================= */
-
 function all() {
+  return new Promise((ok, no) => {
 
-  return new Promise((resolve, reject) => {
-
-    const request =
+    const r =
       db
         .transaction("voices")
         .objectStore("voices")
         .getAll();
 
-    request.onsuccess = () =>
-      resolve(request.result);
+    r.onsuccess = () =>
+      ok(r.result);
 
-    request.onerror = () =>
-      reject(request.error);
+    r.onerror = () =>
+      no(r.error);
   });
 }
 
+function put(v) {
+  return new Promise((ok, no) => {
 
-/* =========================================================
-   GUARDAR VOZ
-========================================================= */
-
-function put(voice) {
-
-  return new Promise((resolve, reject) => {
-
-    const request =
+    const r =
       db
         .transaction(
           "voices",
           "readwrite"
         )
         .objectStore("voices")
-        .put(voice);
+        .put(v);
 
-    request.onsuccess = resolve;
+    r.onsuccess = ok;
 
-    request.onerror = () =>
-      reject(request.error);
+    r.onerror = () =>
+      no(r.error);
   });
 }
 
-
-/* =========================================================
-   ELIMINAR VOZ
-========================================================= */
-
 function del(id) {
+  return new Promise((ok, no) => {
 
-  return new Promise((resolve, reject) => {
-
-    const request =
+    const r =
       db
         .transaction(
           "voices",
@@ -797,36 +426,35 @@ function del(id) {
         .objectStore("voices")
         .delete(id);
 
-    request.onsuccess = resolve;
+    r.onsuccess = ok;
 
-    request.onerror = () =>
-      reject(request.error);
+    r.onerror = () =>
+      no(r.error);
   });
 }
 
+// ======================================================
+// SEGURIDAD HTML
+// ======================================================
 
-/* =========================================================
-   ESCAPAR HTML
-========================================================= */
+function escapeHtml(s) {
 
-function escapeHtml(value) {
-
-  return String(value).replace(
+  return String(s).replace(
     /[&<>'"]/g,
-    character => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "'": "&#39;",
-      '"': "&quot;"
-    }[character])
+    c =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;"
+      })[c]
   );
 }
 
-
-/* =========================================================
-   GUARDAR ARCHIVO DE VOZ
-========================================================= */
+// ======================================================
+// GUARDAR VOZ
+// ======================================================
 
 async function saveVoiceBlob(
   blob,
@@ -835,185 +463,246 @@ async function saveVoiceBlob(
 ) {
 
   if (!blob || !blob.size) {
-
     throw Error(
       "La grabación está vacía."
     );
   }
 
-  const voice = {
+  const voiceId =
+    id || crypto.randomUUID();
 
-    id:
-      id ||
-      crypto.randomUUID(),
-
-    name:
-      name || "Mi voz",
-
+  await put({
+    id: voiceId,
+    name,
     blob,
-
-    date:
-      Date.now(),
-
+    date: Date.now(),
     mime:
       blob.type ||
       "audio/wav"
-  };
-
-  /*
-    Si estamos reemplazando una voz que
-    ya tenía voice_id, lo eliminamos.
-
-    Así la nueva grabación se prepara
-    como una voz nueva.
-  */
-
-  await put(voice);
+  });
 
   await render();
 }
 
-
-/* =========================================================
-   RENDERIZAR VOCES
-========================================================= */
+// ======================================================
+// RENDERIZAR VOCES
+// ======================================================
 
 async function render() {
 
   const list = await all();
+  const el = $("voices");
 
-  const element =
-    $("voices");
+  // ------------------------------------------
+  // ENCABEZADO DE VOZ SELECCIONADA
+  // ------------------------------------------
 
-  element.innerHTML =
+  const selected =
+    list.find(
+      v =>
+        v.id ===
+        selectedVoiceId
+    );
+
+  let header =
+    el.querySelector(
+      ".selected-voice-box"
+    );
+
+  if (!header) {
+
+    header =
+      document.createElement("div");
+
+    header.className =
+      "selected-voice-box";
+
+    el.prepend(header);
+  }
+
+  if (selected) {
+
+    header.innerHTML = `
+      <div style="
+        padding:12px;
+        margin-bottom:12px;
+        border-radius:10px;
+        border:1px solid #aaa;
+        background:rgba(0,0,0,.04);
+      ">
+        <strong>🎙️ Voz seleccionada:</strong>
+        <span style="font-weight:bold;">
+          ${escapeHtml(selected.name)}
+        </span>
+        <br>
+        <small>
+          Esta será la voz elegida para el anuncio.
+        </small>
+      </div>
+    `;
+
+  } else {
+
+    header.innerHTML = `
+      <div style="
+        padding:12px;
+        margin-bottom:12px;
+        border-radius:10px;
+        border:1px solid #aaa;
+      ">
+        <strong>🎙️ Voz seleccionada:</strong>
+        <span>
+          Ninguna
+        </span>
+        <br>
+        <small>
+          Selecciona una voz de la lista.
+        </small>
+      </div>
+    `;
+  }
+
+  // ------------------------------------------
+  // LISTA
+  // ------------------------------------------
+
+  let container =
+    el.querySelector(
+      ".voice-list-container"
+    );
+
+  if (!container) {
+
+    container =
+      document.createElement("div");
+
+    container.className =
+      "voice-list-container";
+
+    el.appendChild(container);
+  }
+
+  container.innerHTML =
     list.length
       ? ""
       : "<p>Aún no hay voces almacenadas.</p>";
 
+  list.forEach(v => {
 
-  list.forEach(voice => {
-
-    const div =
+    const d =
       document.createElement("div");
 
-    div.className =
-      "voice";
-
+    d.className = "voice";
 
     const active =
       recording &&
-      editing === voice.id;
-
+      editing === v.id;
 
     const preparingThis =
       preparing &&
-      editing === voice.id;
+      editing === v.id;
 
+    const isSelected =
+      selectedVoiceId === v.id;
 
-    const selected =
-      selectedVoiceId === voice.id;
-
-
-    div.innerHTML = `
+    d.innerHTML = `
 
       <b>
-        🎙️ ${escapeHtml(voice.name)}
+        🎙️ ${escapeHtml(v.name)}
       </b>
 
       <span class="ready">
-
         ${
           preparingThis
             ? "🎙️ Preparando..."
             : active
-              ? "🔴 Grabando..."
-              : selected
-                ? "● SELECCIONADA"
-                : "● Lista"
+            ? "🔴 Grabando..."
+            : isSelected
+            ? "✅ SELECCIONADA"
+            : "● Lista"
         }
-
       </span>
 
-
       <div class="meta">
-
         ${
           preparingThis
             ? "Preparando el micrófono..."
             : active
-              ? "La muestra anterior está oculta mientras grabas una nueva."
-              : selected
-                ? "Esta es la voz que se utilizará para generar los anuncios."
-                : "Muestra almacenada localmente"
+            ? "La muestra anterior está oculta mientras grabas una nueva."
+            : isSelected
+            ? "Esta es la voz seleccionada."
+            : "Muestra almacenada localmente"
         }
-
       </div>
-
 
       <audio
         controls
         preload="metadata"
-        ${active || preparingThis ? "hidden" : ""}
+        ${
+          active ||
+          preparingThis
+            ? "hidden"
+            : ""
+        }
       ></audio>
-
 
       <div>
 
         <button
-          data-select="${voice.id}"
-          ${active || preparingThis ? "disabled" : ""}
-        >
-
+          data-select="${v.id}"
           ${
-            selected
+            isSelected
+              ? "disabled"
+              : ""
+          }
+        >
+          ${
+            isSelected
               ? "✅ VOZ SELECCIONADA"
               : "🎙️ SELECCIONAR VOZ"
           }
-
         </button>
 
-
-        <button
-          data-r="${voice.id}"
-          ${selected && !active ? "" : ""}
-        >
-
+        <button data-r="${v.id}">
           ${
             active
               ? "⏹ Detener"
               : "🔄 Regrabar"
           }
-
         </button>
-
 
         <button
-          data-u="${voice.id}"
-          ${active || preparingThis ? "disabled" : ""}
+          data-u="${v.id}"
+          ${
+            active ||
+            preparingThis
+              ? "disabled"
+              : ""
+          }
         >
-
           📁 Reemplazar archivo
-
         </button>
-
 
         <button
           class="danger"
-          data-d="${voice.id}"
-          ${active || preparingThis ? "disabled" : ""}
+          data-d="${v.id}"
+          ${
+            active ||
+            preparingThis
+              ? "disabled"
+              : ""
+          }
         >
-
           🗑️ Eliminar
-
         </button>
 
       </div>
     `;
 
-
     const audio =
-      div.querySelector("audio");
-
+      d.querySelector(
+        "audio"
+      );
 
     if (
       !active &&
@@ -1024,124 +713,99 @@ async function render() {
 
         audio.src =
           URL.createObjectURL(
-            voice.blob
+            v.blob
           );
 
       } catch {}
     }
 
-
-    element.appendChild(div);
+    container.appendChild(d);
   });
 
+  // ==================================================
+  // SELECCIONAR VOZ
+  // ==================================================
 
-  /* =====================================================
-     SELECCIONAR VOZ
-  ===================================================== */
-
-  element
+  container
     .querySelectorAll(
       "[data-select]"
     )
-    .forEach(button => {
+    .forEach(b => {
 
-      button.onclick = async () => {
+      b.onclick = async () => {
 
-        selectedVoiceId =
-          button.dataset.select;
+        const id =
+          b.dataset.select;
 
-        localStorage.setItem(
-          "animadorSelectedVoice",
-          selectedVoiceId
-        );
-
-        const voices =
-          await all();
-
-        const selected =
-          voices.find(
-            v =>
-              v.id ===
-              selectedVoiceId
-          );
-
-        if (selected) {
-
-          setVoiceMessage(
-            "🎙️ Voz seleccionada: " +
-            selected.name
-          );
-        }
+        setSelectedVoice(id);
 
         await render();
+
+        const voice =
+          (await all()).find(
+            v => v.id === id
+          );
+
+        setImageStatus(
+          `✅ Voz "${voice?.name || ""}" seleccionada.`
+        );
       };
     });
 
+  // ==================================================
+  // ELIMINAR
+  // ==================================================
 
-  /* =====================================================
-     ELIMINAR VOZ
-  ===================================================== */
-
-  element
+  container
     .querySelectorAll(
       "[data-d]"
     )
-    .forEach(button => {
+    .forEach(b => {
 
-      button.onclick = async () => {
+      b.onclick = async () => {
 
         if (
-          !confirm(
+          confirm(
             "¿Eliminar esta voz almacenada?"
           )
         ) {
-          return;
-        }
 
-        const id =
-          button.dataset.d;
+          const id =
+            b.dataset.d;
 
-        await del(id);
+          await del(id);
 
-        if (
-          selectedVoiceId === id
-        ) {
+          if (
+            selectedVoiceId === id
+          ) {
+            setSelectedVoice(null);
+          }
 
-          selectedVoiceId = null;
-
-          localStorage.removeItem(
-            "animadorSelectedVoice"
-          );
-        }
-
-        if (
-          editing === id
-        ) {
-
-          cancelRecorder();
-
-        } else {
-
-          await render();
+          if (
+            editing === id
+          ) {
+            cancelRecorder();
+          } else {
+            await render();
+          }
         }
       };
     });
 
+  // ==================================================
+  // REGRABAR
+  // ==================================================
 
-  /* =====================================================
-     REGRABAR
-  ===================================================== */
-
-  element
+  container
     .querySelectorAll(
       "[data-r]"
     )
-    .forEach(button => {
+    .forEach(b => {
 
-      button.onclick = async () => {
+      b.onclick = async () => {
 
         const id =
-          button.dataset.r;
+          b.dataset.r;
 
         if (
           recording &&
@@ -1149,7 +813,6 @@ async function render() {
         ) {
 
           await stopRecording();
-
           return;
         }
 
@@ -1157,28 +820,26 @@ async function render() {
       };
     });
 
+  // ==================================================
+  // REEMPLAZAR ARCHIVO
+  // ==================================================
 
-  /* =====================================================
-     REEMPLAZAR ARCHIVO
-  ===================================================== */
-
-  element
+  container
     .querySelectorAll(
       "[data-u]"
     )
-    .forEach(button => {
+    .forEach(b => {
 
-      button.onclick = () =>
+      b.onclick = () =>
         openRecorder(
-          button.dataset.u
+          b.dataset.u
         );
     });
 }
 
-
-/* =========================================================
-   ABRIR GRABADOR
-========================================================= */
+// ======================================================
+// ABRIR GRABADOR
+// ======================================================
 
 async function openRecorder(
   id = null
@@ -1198,54 +859,40 @@ async function openRecorder(
 
   const existing =
     list.find(
-      voice =>
-        voice.id === id
+      v => v.id === id
     );
-
 
   $("voiceName").value =
     existing?.name || "";
 
-
   $("consent").checked =
     false;
-
 
   $("recTitle").textContent =
     existing
       ? "Regrabar voz"
       : "Nueva voz";
 
-
   $("record").textContent =
     "🎙️ GRABAR MUESTRA";
-
 
   $("status").textContent =
     existing
       ? "Listo para regrabar. La muestra anterior se conservará hasta que termines correctamente."
       : "Listo para grabar o subir un archivo.";
 
-
   $("recorder").hidden =
     false;
-
 
   await render();
 }
 
-
-/* =========================================================
-   AGREGAR VOZ
-========================================================= */
-
 $("addVoice").onclick =
   () => openRecorder();
 
-
-/* =========================================================
-   LIMPIAR AUDIO
-========================================================= */
+// ======================================================
+// LIMPIAR AUDIO
+// ======================================================
 
 function cleanupAudio() {
 
@@ -1257,23 +904,22 @@ function cleanupAudio() {
     processorNode?.disconnect();
   } catch {}
 
-  sourceNode = null;
+  sourceNode =
+    null;
 
-  processorNode = null;
-
+  processorNode =
+    null;
 
   if (stream) {
 
     stream
       .getTracks()
       .forEach(
-        track =>
-          track.stop()
+        t => t.stop()
       );
 
     stream = null;
   }
-
 
   if (audioCtx) {
 
@@ -1281,19 +927,18 @@ function cleanupAudio() {
       audioCtx.close();
     } catch {}
 
-    audioCtx = null;
+    audioCtx =
+      null;
   }
 }
 
-
-/* =========================================================
-   CANCELAR GRABADOR
-========================================================= */
+// ======================================================
+// CANCELAR
+// ======================================================
 
 function cancelRecorder() {
 
   recording = false;
-
   preparing = false;
 
   cleanupAudio();
@@ -1306,55 +951,47 @@ function cancelRecorder() {
   $("recorder").hidden =
     true;
 
-  $("audioInput").value = "";
+  $("audioInput").value =
+    "";
 
   render();
 }
 
-
 $("cancel").onclick =
   cancelRecorder;
 
-
-/* =========================================================
-   UNIR MUESTRAS
-========================================================= */
+// ======================================================
+// UNIR GRABACIONES
+// ======================================================
 
 function mergeFloat32(
   chunks
 ) {
 
-  let length = 0;
+  let len = 0;
 
   chunks.forEach(
-    array =>
-      length += array.length
+    a => len += a.length
   );
 
-  const output =
-    new Float32Array(
-      length
-    );
+  const out =
+    new Float32Array(len);
 
-  let offset = 0;
+  let o = 0;
 
-  chunks.forEach(array => {
+  chunks.forEach(a => {
 
-    output.set(
-      array,
-      offset
-    );
+    out.set(a, o);
 
-    offset += array.length;
+    o += a.length;
   });
 
-  return output;
+  return out;
 }
 
-
-/* =========================================================
-   CREAR WAV
-========================================================= */
+// ======================================================
+// CREAR WAV
+// ======================================================
 
 function encodeWav(
   samples,
@@ -1370,30 +1007,28 @@ function encodeWav(
   const view =
     new DataView(buffer);
 
-
   const write =
-    (offset, text) => {
+    (offset, str) => {
 
       for (
         let i = 0;
-        i < text.length;
+        i < str.length;
         i++
       ) {
 
         view.setUint8(
           offset + i,
-          text.charCodeAt(i)
+          str.charCodeAt(i)
         );
       }
     };
-
 
   write(0, "RIFF");
 
   view.setUint32(
     4,
     36 +
-    samples.length * 2,
+      samples.length * 2,
     true
   );
 
@@ -1451,9 +1086,7 @@ function encodeWav(
     true
   );
 
-
-  let offset = 44;
-
+  let off = 44;
 
   for (
     let i = 0;
@@ -1461,7 +1094,7 @@ function encodeWav(
     i++
   ) {
 
-    let value =
+    let x =
       Math.max(
         -1,
         Math.min(
@@ -1470,32 +1103,29 @@ function encodeWav(
         )
       );
 
-
     view.setInt16(
-      offset,
-      value < 0
-        ? value * 0x8000
-        : value * 0x7fff,
+      off,
+      x < 0
+        ? x * 0x8000
+        : x * 0x7fff,
       true
     );
 
-
-    offset += 2;
+    off += 2;
   }
-
 
   return new Blob(
     [view],
     {
-      type: "audio/wav"
+      type:
+        "audio/wav"
     }
   );
 }
 
-
-/* =========================================================
-   DETENER GRABACIÓN
-========================================================= */
+// ======================================================
+// DETENER GRABACIÓN
+// ======================================================
 
 async function stopRecording() {
 
@@ -1506,17 +1136,13 @@ async function stopRecording() {
     return;
   }
 
-
   $("status").textContent =
     "⏳ Procesando la grabación...";
-
 
   $("record").textContent =
     "⏳ GUARDANDO...";
 
-
   recording = false;
-
 
   try {
 
@@ -1525,18 +1151,15 @@ async function stopRecording() {
         recordedSamples
       );
 
-
     const blob =
       encodeWav(
         samples,
         recordedSampleRate
       );
 
-
     cleanupAudio();
 
     recordedSamples = [];
-
 
     if (
       !blob.size ||
@@ -1548,47 +1171,35 @@ async function stopRecording() {
       );
     }
 
-
     await saveVoiceBlob(
       blob,
-      $("voiceName")
-        .value
-        .trim(),
+      $("voiceName").value.trim(),
       editing
     );
-
 
     $("status").textContent =
       "✅ Muestra guardada correctamente.";
 
-
     $("recorder").hidden =
       true;
 
-
-  } catch (error) {
+  } catch (e) {
 
     cleanupAudio();
 
     recordedSamples = [];
 
-
     $("status").textContent =
       "❌ No se pudo guardar la grabación: " +
-      (
-        error.message ||
-        "error"
-      );
-
+      (e.message || "error");
 
     await render();
   }
 }
 
-
-/* =========================================================
-   GRABAR
-========================================================= */
+// ======================================================
+// GRABAR
+// ======================================================
 
 $("record").onclick =
   async () => {
@@ -1596,17 +1207,16 @@ $("record").onclick =
     if (recording) {
 
       await stopRecording();
-
       return;
     }
-
 
     if (preparing) {
       return;
     }
 
-
-    if (!$("consent").checked) {
+    if (
+      !$("consent").checked
+    ) {
 
       $("status").textContent =
         "Marca la autorización primero.";
@@ -1614,12 +1224,10 @@ $("record").onclick =
       return;
     }
 
-
     const name =
       $("voiceName")
         .value
         .trim();
-
 
     if (!name) {
 
@@ -1629,9 +1237,10 @@ $("record").onclick =
       return;
     }
 
-
     if (
-      !navigator.mediaDevices?.getUserMedia
+      !navigator
+        .mediaDevices
+        ?.getUserMedia
     ) {
 
       $("status").textContent =
@@ -1640,25 +1249,21 @@ $("record").onclick =
       return;
     }
 
-
     try {
 
       preparing = true;
 
-
       $("status").textContent =
         "🎙️ Solicitando permiso para usar el micrófono...";
-
 
       $("record").textContent =
         "⏳ PREPARANDO...";
 
-
       await render();
 
-
       stream =
-        await navigator.mediaDevices
+        await navigator
+          .mediaDevices
           .getUserMedia({
             audio: {
               channelCount: 1,
@@ -1668,13 +1273,11 @@ $("record").onclick =
             }
           });
 
-
       audioCtx =
         new (
           window.AudioContext ||
           window.webkitAudioContext
         )();
-
 
       if (
         audioCtx.state ===
@@ -1684,103 +1287,84 @@ $("record").onclick =
         await audioCtx.resume();
       }
 
-
       recordedSampleRate =
         audioCtx.sampleRate;
 
-
       sourceNode =
-        audioCtx.createMediaStreamSource(
-          stream
-        );
-
+        audioCtx
+          .createMediaStreamSource(
+            stream
+          );
 
       processorNode =
-        audioCtx.createScriptProcessor(
-          4096,
-          1,
-          1
-        );
-
+        audioCtx
+          .createScriptProcessor(
+            4096,
+            1,
+            1
+          );
 
       recordedSamples = [];
 
-
       processorNode.onaudioprocess =
-        event => {
+        e => {
 
-          if (!recording) {
+          if (!recording)
             return;
-          }
-
 
           recordedSamples.push(
             new Float32Array(
-              event.inputBuffer
+              e.inputBuffer
                 .getChannelData(0)
             )
           );
         };
 
-
       const silentGain =
         audioCtx.createGain();
 
-
       silentGain.gain.value =
         0;
-
 
       sourceNode.connect(
         processorNode
       );
 
-
       processorNode.connect(
         silentGain
       );
-
 
       silentGain.connect(
         audioCtx.destination
       );
 
-
       preparing = false;
-
       recording = true;
 
-
       await render();
-
 
       $("record").textContent =
         "⏹ DETENER GRABACIÓN";
 
-
       $("status").textContent =
         "🔴 Grabando... Habla ahora.";
 
-
-    } catch (error) {
+    } catch (e) {
 
       preparing = false;
-
       recording = false;
 
       cleanupAudio();
 
       recordedSamples = [];
 
-
       $("record").textContent =
         "🎙️ GRABAR MUESTRA";
 
-
       if (
-        error?.name ===
+        e?.name ===
           "NotAllowedError" ||
-        error?.name ===
+        e?.name ===
           "PermissionDeniedError"
       ) {
 
@@ -1788,7 +1372,7 @@ $("record").onclick =
           "❌ El micrófono no fue autorizado. Revisa el permiso de micrófono del navegador para esta página.";
 
       } else if (
-        error?.name ===
+        e?.name ===
         "NotFoundError"
       ) {
 
@@ -1799,21 +1383,16 @@ $("record").onclick =
 
         $("status").textContent =
           "❌ No se pudo acceder al micrófono: " +
-          (
-            error.message ||
-            "error"
-          );
+          (e.message || "error");
       }
-
 
       await render();
     }
   };
 
-
-/* =========================================================
-   SUBIR ARCHIVO DE VOZ
-========================================================= */
+// ======================================================
+// SUBIR ARCHIVO DE VOZ
+// ======================================================
 
 $("audioInput").onchange =
   async e => {
@@ -1821,13 +1400,12 @@ $("audioInput").onchange =
     const file =
       e.target.files?.[0];
 
-
-    if (!file) {
+    if (!file)
       return;
-    }
 
-
-    if (!$("consent").checked) {
+    if (
+      !$("consent").checked
+    ) {
 
       $("status").textContent =
         "Marca la autorización primero.";
@@ -1837,13 +1415,11 @@ $("audioInput").onchange =
       return;
     }
 
-
     const name =
       $("voiceName")
         .value
         .trim() ||
       "Mi voz";
-
 
     if (
       file.size >
@@ -1857,7 +1433,6 @@ $("audioInput").onchange =
 
       return;
     }
-
 
     if (
       !file.type.startsWith(
@@ -1873,7 +1448,6 @@ $("audioInput").onchange =
       return;
     }
 
-
     try {
 
       await saveVoiceBlob(
@@ -1882,36 +1456,25 @@ $("audioInput").onchange =
         editing
       );
 
-
       $("recorder").hidden =
         true;
-
 
       $("status").textContent =
         "Archivo de voz guardado.";
 
-
-    } catch (error) {
+    } catch (err) {
 
       $("status").textContent =
         "No se pudo guardar el archivo.";
     }
 
-
     e.target.value = "";
   };
 
+// ======================================================
+// INICIAR
+// ======================================================
 
-/* =========================================================
-   INICIAR
-========================================================= */
-
-openDB()
-  .then(render)
-  .catch(error => {
-
-    console.error(
-      "No se pudo abrir la base de datos:",
-      error
-    );
-  });
+openDB().then(
+  render
+);
