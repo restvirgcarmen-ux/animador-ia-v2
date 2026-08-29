@@ -400,7 +400,7 @@ async function generateCustomVoice() {
     await currentAudio.play();
 
     setImageStatus(
-      "✅ Reproduciendo con la voz " +
+      "✅ Reproduciendo PRUEBA V6 " +
       voice.name
     );
 
