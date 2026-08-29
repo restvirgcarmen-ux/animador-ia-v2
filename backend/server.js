@@ -8,6 +8,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6";
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+const ELEVENLABS_MODEL =
+  process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
 
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
