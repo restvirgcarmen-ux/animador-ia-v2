@@ -250,42 +250,7 @@ $("generate").onclick = async () => {
 // seleccionada con el backend.
 // ======================================================
 
-$("speak").onclick = () => {
-
-  speechSynthesis.cancel();
-
-  const text =
-    $("script").value.trim();
-
-  if (!text) return;
-
-  const voiceName =
-    selectedVoiceId
-      ? "Voz personalizada seleccionada"
-      : "voz del sistema";
-
-  setImageStatus(
-    `🔊 Reproduciendo con ${voiceName}.`
-  );
-
-  const u =
-    new SpeechSynthesisUtterance(text);
-
-  const v =
-    speechSynthesis.getVoices();
-
-  u.voice =
-    v.find(x =>
-      x.lang
-        ?.toLowerCase()
-        .startsWith("es")
-    ) || v[0];
-
-  u.rate = +$("rate").value;
-  u.pitch = +$("pitch").value;
-
-  speechSynthesis.speak(u);
-};
+$("speak").onclick = generateCustomVoice;
 
 $("stop").onclick = () => {
   speechSynthesis.cancel();
