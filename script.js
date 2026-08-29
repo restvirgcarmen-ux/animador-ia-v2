@@ -33,6 +33,21 @@ let selectedVoiceId =
 let currentAudio = null;
 let generatingAudio = false;
 
+// ======================================================
+// BLOQUEAR CUALQUIER VOZ DEL SISTEMA
+// ======================================================
+
+function stopSystemVoice() {
+  try {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.pause();
+    }
+  } catch (e) {
+    console.warn("No se pudo detener la voz del sistema:", e);
+  }
+}
+
 function getSelectedVoiceId() {
   return selectedVoiceId;
 }
@@ -58,6 +73,9 @@ function setSelectedVoice(id) {
 
 function stopCustomAudio() {
 
+  // Detener cualquier voz del navegador
+  stopSystemVoice();
+
   if (currentAudio) {
 
     try {
@@ -74,7 +92,6 @@ function stopCustomAudio() {
     currentAudio = null;
   }
 }
-
 
 // ======================================================
 // CONVERTIR AUDIO A BASE64
@@ -203,7 +220,10 @@ async function generateCustomVoice() {
   }
 
   generatingAudio = true;
-
+  
+  // Asegurar que NUNCA se reproduzca la voz del sistema
+  stopSystemVoice();
+  
   stopCustomAudio();
 
   $("speak").textContent =
