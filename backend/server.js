@@ -10,6 +10,15 @@ const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6";
 app.use(cors());
 app.use(express.json({limit:"12mb"}));
 
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    service: "Animador IA Backend",
+    version: "1.1.0",
+    status: "online"
+  });
+});
+
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"Animador IA Backend",version:"1.1.0"}));
 
 function templateScript(brief,style="animador",energy="media"){
