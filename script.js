@@ -30,6 +30,9 @@ let selectedImage = null;
 let selectedVoiceId =
   localStorage.getItem("animadorIA_selectedVoice") || null;
 
+let currentAudio = null;
+let generatingAudio = false;
+
 function getSelectedVoiceId() {
   return selectedVoiceId;
 }
@@ -46,6 +49,362 @@ function setSelectedVoice(id) {
     localStorage.removeItem(
       "animadorIA_selectedVoice"
     );
+  }
+}
+
+// ======================================================
+// VOZ PERSONALIZADA - REPRODUCCIÓN
+// ======================================================
+
+function stopCustomAudio() {
+
+  if (currentAudio) {
+
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch {}
+
+    try {
+      if (currentAudio.src) {
+        URL.revokeObjectURL(currentAudio.src);
+      }
+    } catch {}
+
+    currentAudio = null;
+  }
+}
+
+
+// ======================================================
+// CONVERTIR AUDIO A BASE64
+// ======================================================
+
+async function blobToDataURL(blob) {
+
+  return new Promise((resolve, reject) => {
+
+    const reader = new FileReader();
+
+    reader.onload = () =>
+      resolve(reader.result);
+
+    reader.onerror = reject;
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+
+// ======================================================
+// PREPARAR VOZ EN ELEVENLABS
+// ======================================================
+
+async function ensureVoiceCloned(voice) {
+
+  if (!voice || !voice.blob) {
+
+    throw new Error(
+      "No se encontró la muestra de voz."
+    );
+  }
+
+  // Si ya tenemos voice_id,
+  // no volvemos a crear la voz.
+
+  if (voice.voice_id) {
+    return voice.voice_id;
+  }
+
+  setImageStatus(
+    "🎙️ Preparando la voz " +
+    voice.name +
+    "..."
+  );
+
+  const audioBase64 =
+    await blobToDataURL(voice.blob);
+
+  const response =
+    await fetch(
+      BACKEND + "/api/voice/clone",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body: JSON.stringify({
+          audioBase64,
+          name: voice.name
+        })
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok || !data.ok) {
+
+    throw new Error(
+      data.error ||
+      "No se pudo preparar la voz personalizada."
+    );
+  }
+
+  if (!data.voice_id) {
+
+    throw new Error(
+      "El servidor no devolvió el identificador de la voz."
+    );
+  }
+
+  // Guardamos el voice_id
+  // en IndexedDB.
+
+  voice.voice_id =
+    data.voice_id;
+
+  await put(voice);
+
+  return data.voice_id;
+}
+
+
+// ======================================================
+// GENERAR AUDIO CON LA VOZ SELECCIONADA
+// ======================================================
+
+async function generateCustomVoice() {
+
+  if (generatingAudio) return;
+
+  const text =
+    $("script").value.trim();
+
+  if (!text) {
+
+    alert(
+      "Primero genera o escribe un guion."
+    );
+
+    return;
+  }
+
+  if (!selectedVoiceId) {
+
+    alert(
+      "Primero selecciona una voz personalizada."
+    );
+
+    return;
+  }
+
+  generatingAudio = true;
+
+  stopCustomAudio();
+
+  $("speak").textContent =
+    "⏳ GENERANDO AUDIO...";
+
+  $("speak").disabled = true;
+
+  try {
+
+    const voices =
+      await all();
+
+    const voice =
+      voices.find(
+        v =>
+          v.id ===
+          selectedVoiceId
+      );
+
+    if (!voice) {
+
+      throw new Error(
+        "La voz seleccionada ya no está disponible."
+      );
+    }
+
+    const voiceId =
+      await ensureVoiceCloned(voice);
+
+    setImageStatus(
+      "🎙️ Generando el anuncio con la voz " +
+      voice.name +
+      "..."
+    );
+
+    const response =
+      await fetch(
+        BACKEND +
+        "/api/voice/generate",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            text,
+
+            voice_id:
+              voiceId,
+
+            rate:
+              +$("rate").value,
+
+            pitch:
+              +$("pitch").value
+
+          })
+        }
+      );
+
+    if (!response.ok) {
+
+      let message =
+        "No se pudo generar el audio.";
+
+      try {
+
+        const contentType =
+          response.headers.get(
+            "content-type"
+          ) || "";
+
+        if (
+          contentType.includes(
+            "application/json"
+          )
+        ) {
+
+          const data =
+            await response.json();
+
+          message =
+            data.error ||
+            message;
+
+        } else {
+
+          const serverText =
+            await response.text();
+
+          console.error(
+            "Respuesta no JSON del servidor:",
+            serverText
+          );
+
+          message =
+            "El servidor no respondió correctamente. Verifica el backend de Render.";
+        }
+
+      } catch (error) {
+
+        console.error(
+          "Error leyendo respuesta:",
+          error
+        );
+      }
+
+      throw new Error(message);
+    }
+
+    const audioBlob =
+      await response.blob();
+
+    if (!audioBlob.size) {
+
+      throw new Error(
+        "El servidor devolvió un audio vacío."
+      );
+    }
+
+    const audioURL =
+      URL.createObjectURL(
+        audioBlob
+      );
+
+    currentAudio =
+      new Audio(audioURL);
+
+    currentAudio.preload =
+      "auto";
+
+    currentAudio.onended = () => {
+
+      try {
+        URL.revokeObjectURL(
+          audioURL
+        );
+      } catch {}
+
+      currentAudio = null;
+
+      $("speak").disabled =
+        false;
+
+      $("speak").textContent =
+        "🔊 ESCUCHAR";
+    };
+
+    currentAudio.onerror = () => {
+
+      try {
+        URL.revokeObjectURL(
+          audioURL
+        );
+      } catch {}
+
+      currentAudio = null;
+
+      $("speak").disabled =
+        false;
+
+      $("speak").textContent =
+        "🔊 ESCUCHAR";
+
+      alert(
+        "No se pudo reproducir el audio generado."
+      );
+    };
+
+    await currentAudio.play();
+
+    setImageStatus(
+      "✅ Reproduciendo con la voz " +
+      voice.name
+    );
+
+  } catch (error) {
+
+    console.error(
+      "ERROR DE VOZ:",
+      error
+    );
+
+    alert(
+      error.message ||
+      "No se pudo generar el audio."
+    );
+
+    $("speak").disabled =
+      false;
+
+    $("speak").textContent =
+      "🔊 ESCUCHAR";
+
+  } finally {
+
+    generatingAudio = false;
   }
 }
 
@@ -242,36 +601,22 @@ $("generate").onclick = async () => {
 };
 
 // ======================================================
-// ESCUCHAR
-// ======================================================
-//
-// POR AHORA sigue usando la voz del sistema.
-// En el siguiente paso conectaremos la voz personalizada
-// seleccionada con el backend.
+// ESCUCHAR / DETENER
 // ======================================================
 
-$("speak").onclick = generateCustomVoice;
+$("speak").onclick =
+  generateCustomVoice;
+
 
 $("stop").onclick = () => {
+
   stopCustomAudio();
 
-  $("speak").disabled = false;
-  $("speak").textContent = "🔊 ESCUCHAR";
-};
+  $("speak").disabled =
+    false;
 
-$("copy").onclick = async () => {
-
-  await navigator.clipboard.writeText(
-    $("script").value
-  );
-
-  $("copy").textContent =
-    "¡Copiado!";
-
-  setTimeout(() => {
-    $("copy").textContent =
-      "Copiar";
-  }, 1200);
+  $("speak").textContent =
+    "🔊 ESCUCHAR";
 };
 
 // ======================================================
