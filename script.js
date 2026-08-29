@@ -253,7 +253,10 @@ $("generate").onclick = async () => {
 $("speak").onclick = generateCustomVoice;
 
 $("stop").onclick = () => {
-  speechSynthesis.cancel();
+  stopCustomAudio();
+
+  $("speak").disabled = false;
+  $("speak").textContent = "🔊 ESCUCHAR";
 };
 
 $("copy").onclick = async () => {
