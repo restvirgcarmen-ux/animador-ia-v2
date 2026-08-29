@@ -140,13 +140,99 @@ app.post("/api/generate-script-from-image", async (req, res) => {
   }
 });
 
-app.post("/api/voice/generate", (req, res) =>
-  res.status(501).json({
-    ok: false,
-    error: "Motor de voz IA todavía no conectado.",
-    nextStep: "Conectar un proveedor TTS/voice-cloning mediante variables de entorno seguras."
-  })
-);
+app.post("/api/voice/generate", async (req, res) => {
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(503).json({
+      ok: false,
+      error: "Falta configurar ELEVENLABS_API_KEY en Render."
+    });
+  }
+
+  const {
+    text,
+    voice_id,
+    rate = 1,
+    pitch = 0.9
+  } = req.body || {};
+
+  if (!text?.trim()) {
+    return res.status(400).json({
+      ok: false,
+      error: "Falta el texto del guion."
+    });
+  }
+
+  if (!voice_id) {
+    return res.status(400).json({
+      ok: false,
+      error: "Primero selecciona una voz personalizada."
+    });
+  }
+
+  try {
+
+    const response = await fetch(
+      "https://api.elevenlabs.io/v1/text-to-speech/" +
+      encodeURIComponent(voice_id) +
+      "?output_format=mp3_44100_128",
+      {
+        method: "POST",
+
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg"
+        },
+
+        body: JSON.stringify({
+          text: String(text).trim(),
+
+          model_id: ELEVENLABS_MODEL,
+
+          language_code: "es",
+
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.8,
+            style: 0.25,
+            use_speaker_boost: true
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+
+      const errorText = await response.text();
+
+      throw new Error(
+        errorText || "ElevenLabs no pudo generar el audio."
+      );
+    }
+
+    const audioBuffer = Buffer.from(
+      await response.arrayBuffer()
+    );
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Length": audioBuffer.length,
+      "Cache-Control": "no-store"
+    });
+
+    res.send(audioBuffer);
+
+  } catch (e) {
+
+    console.error("Error generando voz:", e);
+
+    res.status(500).json({
+      ok: false,
+      error: e.message || "No se pudo generar el audio."
+    });
+  }
+});
 
 app.listen(PORT, () =>
   console.log(`Animador IA Backend escuchando en puerto ${PORT}`)
