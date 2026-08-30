@@ -1,6 +1,6 @@
 const $ = x => document.getElementById(x);
 
-const BACKEND = "https://animador-ia-backend.onrender.com";
+const BACKEND = "https://animador-ia-v2-production.up.railway.app";
 
 const templates = {
   animador: [
@@ -93,6 +93,7 @@ function stopCustomAudio() {
   }
 }
 
+
 // ======================================================
 // CONVERTIR AUDIO A BASE64
 // ======================================================
@@ -160,26 +161,28 @@ async function ensureVoiceCloned(voice) {
       }
     );
 
-  // --- NUEVA VALIDACIÓN DE SEGURIDAD ---
-const contentType = response.headers.get("content-type") || "";
+  // --- VALIDACIÓN DE SEGURIDAD ---
+  const contentType = response.headers.get("content-type") || "";
 
-if (!contentType.includes("application/json")) {
-  const textoError = await response.text();
-  console.error("Respuesta inesperada del servidor:", textoError);
+  if (!contentType.includes("application/json")) {
+    const textoError = await response.text();
+    console.error("Respuesta inesperada del servidor:", textoError);
 
-  throw new Error(
-    "El servidor de Render está despertando o devolvió un error HTML. Por favor, espera un minuto e intenta de nuevo."
-  );
-}
+    throw new Error(
+      "El servidor de Railway devolvió una respuesta inesperada. Por favor, espera un momento e intenta de nuevo."
+    );
+  }
 
-const data = await response.json();
-// -------------------------------------
+  const data =
+    await response.json();
 
-if (!response.ok || !data.ok) {
-  throw new Error(
-    data.error || "No se pudo preparar la voz personalizada."
-  );
-}
+  if (!response.ok || !data.ok) {
+
+    throw new Error(
+      data.error ||
+      "No se pudo preparar la voz personalizada."
+    );
+  }
 
   if (!data.voice_id) {
 
@@ -230,10 +233,10 @@ async function generateCustomVoice() {
   }
 
   generatingAudio = true;
-  
+
   // Asegurar que NUNCA se reproduzca la voz del sistema
   stopSystemVoice();
-  
+
   stopCustomAudio();
 
   $("speak").textContent =
@@ -334,7 +337,7 @@ async function generateCustomVoice() {
           );
 
           message =
-            "El servidor no respondió correctamente. Verifica el backend de Render.";
+            "El servidor no respondió correctamente. Verifica el backend de Railway.";
         }
 
       } catch (error) {
@@ -410,7 +413,7 @@ async function generateCustomVoice() {
     await currentAudio.play();
 
     setImageStatus(
-      "✅ Reproduciendo PRUEBA V6 " +
+      "✅ Reproduciendo con la voz " +
       voice.name
     );
 
@@ -590,13 +593,13 @@ $("generate").onclick = async () => {
 
     const contentType = r.headers.get("content-type") || "";
 
-if (!contentType.includes("application/json")) {
-  throw new Error(
-    "El backend devolvió HTML. El servidor podría estar apagado o experimentando sobrecarga."
-  );
-}
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        "El backend de Railway devolvió HTML. El servidor podría estar apagado o experimentando sobrecarga."
+      );
+    }
 
-d = await r.json();
+    d = await r.json();
 
     if (!r.ok || !d.ok) {
       throw Error(
