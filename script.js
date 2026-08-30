@@ -588,7 +588,15 @@ $("generate").onclick = async () => {
       );
     }
 
-    d = await r.json();
+    const contentType = r.headers.get("content-type") || "";
+
+if (!contentType.includes("application/json")) {
+  throw new Error(
+    "El backend devolvió HTML. El servidor podría estar apagado o experimentando sobrecarga."
+  );
+}
+
+d = await r.json();
 
     if (!r.ok || !d.ok) {
       throw Error(
