@@ -324,6 +324,159 @@ app.post("/api/generate-script-from-image", async (req, res) => {
   }
 });
 
+// AQUÍ VA LA RUTA DE CLONACIÓN DE VOZ
+
+app.post("/api/voice/clone", async (req, res) => {
+
+  console.log("================================");
+  console.log("CLONE VOICE: PETICIÓN RECIBIDA");
+  console.log("================================");
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(503).json({
+      ok: false,
+      error: "Falta configurar ELEVENLABS_API_KEY en Render."
+    });
+  }
+
+  try {
+
+    const { audioBase64, name } = req.body || {};
+
+    if (!audioBase64) {
+      return res.status(400).json({
+        ok: false,
+        error: "No se recibió la muestra de voz."
+      });
+    }
+
+    if (!name?.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta el nombre de la voz."
+      });
+    }
+
+    console.log("Nombre de voz:", name);
+    console.log("Muestra recibida correctamente.");
+
+    const match = audioBase64.match(
+      /^data:(audio\/[^;]+);base64,(.+)$/
+    );
+
+    if (!match) {
+      return res.status(400).json({
+        ok: false,
+        error: "Formato de audio Base64 no válido."
+      });
+    }
+
+    const mimeType = match[1];
+    const base64Data = match[2];
+
+    const audioBuffer = Buffer.from(
+      base64Data,
+      "base64"
+    );
+
+    console.log("Tamaño del audio:", audioBuffer.length);
+
+    const form = new FormData();
+
+    const extension =
+      mimeType.includes("wav") ? "wav" :
+      mimeType.includes("mpeg") ? "mp3" :
+      mimeType.includes("mp4") ? "m4a" :
+      "audio";
+
+    form.append(
+      "files",
+      new Blob([audioBuffer], {
+        type: mimeType
+      }),
+      `voz.${extension}`
+    );
+
+    form.append("name", name.trim());
+
+    const response = await fetch(
+      "https://api.elevenlabs.io/v1/voices/add",
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY
+        },
+        body: form
+      }
+    );
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    console.log(
+      "ElevenLabs status:",
+      response.status
+    );
+
+    if (!contentType.includes("application/json")) {
+
+      const errorText = await response.text();
+
+      console.error(
+        "Respuesta inesperada:",
+        errorText
+      );
+
+      throw new Error(
+        "ElevenLabs devolvió una respuesta inesperada."
+      );
+    }
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+      console.error(
+        "Error ElevenLabs:",
+        data
+      );
+
+      throw new Error(
+        data?.detail?.message ||
+        data?.detail ||
+        data?.message ||
+        "ElevenLabs no pudo crear la voz."
+      );
+    }
+
+    console.log(
+      "VOZ CREADA:",
+      data.voice_id
+    );
+
+    return res.json({
+      ok: true,
+      voice_id: data.voice_id,
+      requires_verification:
+        data.requires_verification || false
+    });
+
+  } catch (e) {
+
+    console.error(
+      "ERROR CLONANDO VOZ:",
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        e.message ||
+        "No se pudo crear la voz."
+    });
+  }
+});
+
 app.post("/api/voice/generate", async (req, res) => {
 
   if (!ELEVENLABS_API_KEY) {
