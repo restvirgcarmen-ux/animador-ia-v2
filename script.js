@@ -1,4 +1,4 @@
-alert("ESTE ES EL SCRIPT.JS DE ANIMADOR IA V2");
+alert("ESTE ES EL SCRIPT.JS DE ANIMADOR IA V6");
 const $ = x => document.getElementById(x);
 
 const BACKEND = "https://animador-ia-backend.onrender.com";
