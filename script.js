@@ -160,16 +160,26 @@ async function ensureVoiceCloned(voice) {
       }
     );
 
-  const data =
-    await response.json();
+  // --- NUEVA VALIDACIÓN DE SEGURIDAD ---
+const contentType = response.headers.get("content-type") || "";
 
-  if (!response.ok || !data.ok) {
+if (!contentType.includes("application/json")) {
+  const textoError = await response.text();
+  console.error("Respuesta inesperada del servidor:", textoError);
 
-    throw new Error(
-      data.error ||
-      "No se pudo preparar la voz personalizada."
-    );
-  }
+  throw new Error(
+    "El servidor de Render está despertando o devolvió un error HTML. Por favor, espera un minuto e intenta de nuevo."
+  );
+}
+
+const data = await response.json();
+// -------------------------------------
+
+if (!response.ok || !data.ok) {
+  throw new Error(
+    data.error || "No se pudo preparar la voz personalizada."
+  );
+}
 
   if (!data.voice_id) {
 
