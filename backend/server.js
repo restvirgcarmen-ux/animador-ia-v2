@@ -64,6 +64,190 @@ function templateScript(brief, style = "animador", energy = "media") {
   return `${t[0]}\n\n${middle}\n\n${t[1]}`;
 }
 
+app.post("/api/voice/clone", async (req, res) => {
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(503).json({
+      ok: false,
+      error: "Falta configurar ELEVENLABS_API_KEY en Render."
+    });
+  }
+
+  const {
+    audioBase64,
+    name = "Gerardo"
+  } = req.body || {};
+
+  if (!audioBase64) {
+    return res.status(400).json({
+      ok: false,
+      error: "Falta la grabación de voz."
+    });
+  }
+
+  try {
+
+    // -----------------------------------------
+    // Convertir Base64 recibido del navegador
+    // a un archivo de audio
+    // -----------------------------------------
+
+    let base64Data = String(audioBase64);
+
+    if (base64Data.includes(",")) {
+      base64Data = base64Data.split(",")[1];
+    }
+
+    const audioBuffer = Buffer.from(base64Data, "base64");
+
+    if (!audioBuffer.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "La grabación de voz está vacía."
+      });
+    }
+
+    // -----------------------------------------
+    // Crear formulario multipart para ElevenLabs
+    // -----------------------------------------
+
+    const form = new FormData();
+
+    const audioBlob = new Blob(
+      [audioBuffer],
+      { type: "audio/webm" }
+    );
+
+    form.append(
+      "files",
+      audioBlob,
+      "gerardo.webm"
+    );
+
+    form.append(
+      "name",
+      String(name).trim() || "Gerardo"
+    );
+
+    form.append(
+      "description",
+      "Voz personalizada autorizada para anuncios."
+    );
+
+    // -----------------------------------------
+    // Crear Instant Voice Clone
+    // -----------------------------------------
+
+    const response = await fetch(
+      "https://api.elevenlabs.io/v1/voices/add",
+      {
+        method: "POST",
+
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY
+        },
+
+        body: form
+      }
+    );
+
+    // -----------------------------------------
+    // Leer respuesta de ElevenLabs
+    // -----------------------------------------
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+
+      console.error(
+        "Error ElevenLabs clonando voz:",
+        response.status,
+        responseText
+      );
+
+      let errorMessage =
+        "ElevenLabs no pudo crear la voz.";
+
+      try {
+        const errorData =
+          JSON.parse(responseText);
+
+        errorMessage =
+          errorData?.detail?.message ||
+          errorData?.detail ||
+          errorData?.error ||
+          errorMessage;
+
+      } catch {
+        if (responseText) {
+          errorMessage = responseText;
+        }
+      }
+
+      return res.status(response.status).json({
+        ok: false,
+        error: errorMessage
+      });
+    }
+
+    // -----------------------------------------
+    // ElevenLabs devuelve JSON
+    // -----------------------------------------
+
+    let data;
+
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return res.status(500).json({
+        ok: false,
+        error: "ElevenLabs devolvió una respuesta inválida."
+      });
+    }
+
+    if (!data?.voice_id) {
+      return res.status(500).json({
+        ok: false,
+        error: "ElevenLabs no devolvió el voice_id."
+      });
+    }
+
+    console.log(
+      "Voz creada correctamente:",
+      data.voice_id
+    );
+
+    // -----------------------------------------
+    // Respuesta al navegador
+    // -----------------------------------------
+
+    return res.json({
+      ok: true,
+      voice_id: data.voice_id,
+      name: String(name).trim() || "Gerardo",
+      requires_verification:
+        data.requires_verification || false
+    });
+
+  } catch (e) {
+
+    console.error(
+      "Error interno clonando voz:",
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        e.message ||
+        "No se pudo crear la voz personalizada."
+    });
+  }
+});
+
 app.post("/api/generate-script", (req, res) => {
   const { brief, style = "animador", energy = "media" } = req.body || {};
 
