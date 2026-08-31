@@ -263,10 +263,10 @@ app.post("/api/voice/generate", async (req, res) => {
     });
   }
 
-  try {
+     try {
     const response = await fetch(
-       "https://elevenlabs.io" + encodeURIComponent(voice_id) + "?output_format=mp3_44100_128",
-   
+      "https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(voice_id) + "?output_format=mp3_44100_128",
+      {
         method: "POST",
         headers: {
           "xi-api-key": ELEVENLABS_API_KEY,
