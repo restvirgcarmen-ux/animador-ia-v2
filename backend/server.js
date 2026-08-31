@@ -265,7 +265,7 @@ app.post("/api/voice/generate", async (req, res) => {
 
   try {
     const response = await fetch(
-      'https://elevenlabs.io{encodeURIComponent(voice_id)}?output_format=mp3_44100_128'
+      'https://elevenlabs.io{encodeURIComponent(voice_id)}?output_format=mp3_44100_128ʼ
       
         method: "POST",
         headers: {
