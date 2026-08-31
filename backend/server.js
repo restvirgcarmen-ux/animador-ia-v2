@@ -16,7 +16,7 @@ const ELEVENLABS_MODEL =
 
 // Configuración CORS explícita para tu dominio de GitHub Pages
 app.use(cors({
-  origin: "https://github.io",
+  origin: "*",
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
