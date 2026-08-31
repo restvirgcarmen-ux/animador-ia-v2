@@ -163,63 +163,48 @@ app.post("/api/voice/clone", async (req, res) => {
     const { audioBase64, name } = req.body || {};
 
     if (!audioBase64) {
-      return res.status(400).json({
-        ok: false,
-        error: "No se recibió la muestra de voz."
-      });
+      return res.status(400).json({ ok: false, error: "No se recibió la muestra de voz." });
     }
 
     if (!name?.trim()) {
-      return res.status(400).json({
-        ok: false,
-        error: "Falta el nombre de la voz."
-      });
+      return res.status(400).json({ ok: false, error: "Falta el nombre de la voz." });
     }
 
     const match = audioBase64.match(/^data:(audio\/[^;]+);base64,(.+)$/);
-
     if (!match) {
-      return res.status(400).json({
-        ok: false,
-        error: "Formato de audio Base64 no válido."
-      });
+      return res.status(400).json({ ok: false, error: "Formato de audio Base64 no válido." });
     }
 
     const mimeType = match[1];
     const base64Data = match[2];
     const audioBuffer = Buffer.from(base64Data, "base64");
 
-    const form = new FormData();
-    const extension =
-      mimeType.includes("wav") ? "wav" :
-      mimeType.includes("mpeg") ? "mp3" :
-      mimeType.includes("mp4") ? "m4a" : "audio";
-
-    form.append(
-      "files",
-      new Blob([audioBuffer], { type: mimeType }),
-      `voz.${extension}`
+    const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") ? "mp3" : "m4a";
+    const boundary = "----WebKitFormBoundary" + Math.random().toString(16).substring(2);
+    
+    const header = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="voz.${extension}"\r\nContent-Type: ${mimeType}\r\n\r\n`
     );
-
-    form.append("name", name.trim());
+    const middleField = Buffer.from(
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${name.trim()}\r\n--${boundary}--\r\n`
+    );
+    const bodyBuffer = Buffer.concat([header, audioBuffer, middleField]);
 
     const response = await fetch("https://elevenlabs.io", {
       method: "POST",
       headers: {
-        "xi-api-key": ELEVENLABS_API_KEY
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`
       },
-      body: form
+      body: bodyBuffer
     });
 
     const contentType = response.headers.get("content-type") || "";
-
     if (!contentType.includes("application/json")) {
-      const errorText = await response.text();
       throw new Error("ElevenLabs devolvió una respuesta inesperada.");
     }
 
     const data = await response.json();
-
     if (!response.ok) {
       throw new Error(data?.detail?.message || data?.message || "ElevenLabs no pudo crear la voz.");
     }
