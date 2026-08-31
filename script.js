@@ -1,6 +1,6 @@
 const $ = x => document.getElementById(x);
 
-const BACKEND = "https://animador-ia-v2-backend.onrender.com";
+const BACKEND = "https://animador-ia-v2.onrender.com";
 
 const templates = {
   animador: [
