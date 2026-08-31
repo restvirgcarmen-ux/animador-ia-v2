@@ -312,5 +312,5 @@ app.post("/api/voice/generate", async (req, res) => {
 });
 
 app.listen(PORT, () =>
-  console.log(`Animador IA Backend escuchando en puerto ${PORT}`)
+  console.log(`Animador IA v2 Backend escuchando en puerto ${PORT}`)
 );
