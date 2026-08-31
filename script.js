@@ -169,7 +169,7 @@ async function ensureVoiceCloned(voice) {
     console.error("Respuesta inesperada del servidor:", textoError);
 
     throw new Error(
-      "El servidor de Railway devolvió una respuesta inesperada. Por favor, espera un momento e intenta de nuevo."
+      "El servidor de Render devolvió una respuesta inesperada. Por favor, espera un momento e intenta de nuevo."
     );
   }
 
