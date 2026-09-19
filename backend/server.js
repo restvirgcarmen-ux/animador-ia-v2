@@ -78,47 +78,57 @@ app.post("/api/generate-script", (req, res) => {
   });
 });
 
-// CLONACIÓN DE AUDIO DESDE CELULAR
+// ======================================================
+// ENDPOINT: CLONACIÓN DE VOZ (LÍNEAS 82 A 148 EN TU ARCHIVO)
+// ======================================================
 app.post("/api/voice/clone", async (req, res) => {
+  console.log("================================");
+  console.log("CLONE VOICE: PROCESANDO AUDIO");
+  console.log("================================");
+
   if (!ELEVENLABS_API_KEY) {
-    return res.status(503).json({ ok: false, error: "Falta configurar ELEVENLABS_API_KEY." });
+    return res.status(503).json({ ok: false, error: "Falta configurar la API Key en el servidor." });
   }
 
   try {
     const { audioBase64, name } = req.body || {};
 
     if (!audioBase64 || !name?.trim()) {
-      return res.status(400).json({ ok: false, error: "Faltan datos de la voz." });
+      return res.status(400).json({ ok: false, error: "Faltan datos obligatorios de la voz." });
     }
 
+    let base64Data = audioBase64;
     let mimeType = "audio/mpeg";
-    let base64Data = "";
 
-    if (typeof audioBase64 === 'string' && audioBase64.includes(";base64,")) {
-      const parts = audioBase64.split(";base64,");
-      const rawMime = parts.shift();
+    if (String(audioBase64).includes(";base64,")) {
+      const parts = String(audioBase64).split(";base64,");
+      const rawMime = parts.shift() || "";
       mimeType = rawMime.replace("data:", "");
-      base64Data = parts.pop();
-    } else {
-      base64Data = audioBase64;
+      base64Data = parts.pop() || "";
     }
 
-    base64Data = String(base64Data).replace(/[\s\r\n]+/g, "");
+    base64Data = base64Data.replace(/[\s\r\n]+/g, "");
     const audioBuffer = Buffer.from(base64Data, "base64");
 
     if (audioBuffer.length === 0) {
-      return res.status(400).json({ ok: false, error: "Archivo de audio vacío o corrupto." });
+      return res.status(400).json({ ok: false, error: "El archivo de audio está vacío." });
     }
 
-    const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") ? "mp3" : "m4a";
+    let extension = "mp3";
+    if (mimeType.includes("wav")) extension = "wav";
+    if (mimeType.includes("webm")) extension = "webm";
+    if (mimeType.includes("ogg")) extension = "ogg";
+    if (mimeType.includes("mp4") || mimeType.includes("m4a")) extension = "m4a";
+
     const boundary = "----WebKitFormBoundary" + Math.random().toString(16).substring(2);
     
     const header = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="voz.${extension}"\r\nContent-Type: ${mimeType}\r\n\r\n`
+      `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="audio_clonado.${extension}"\r\nContent-Type: ${mimeType}\r\n\r\n`
     );
     const middleField = Buffer.from(
       `\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${name.trim()}\r\n--${boundary}--\r\n`
     );
+    
     const bodyBuffer = Buffer.concat([header, audioBuffer, middleField]);
 
     const response = await fetch("https://elevenlabs.io", {
@@ -131,8 +141,12 @@ app.post("/api/voice/clone", async (req, res) => {
     });
 
     const data = await response.json();
+    
     if (!response.ok) {
-      throw new Error(data?.detail?.message || data?.message || "Error en ElevenLabs.");
+      return res.status(response.status).json({
+        ok: false,
+        error: data?.detail?.message || data?.message || "ElevenLabs rechazó la muestra de voz."
+      });
     }
 
     return res.json({
@@ -146,7 +160,9 @@ app.post("/api/voice/clone", async (req, res) => {
   }
 });
 
-// GENERADOR TEXT TO SPEECH
+// ======================================================
+// ENDPOINT: GENERACIÓN DE ANUNCIO TEXT-TO-SPEECH (LÍNEAS 149 A 206)
+// ======================================================
 app.post("/api/voice/generate", async (req, res) => {
   if (!ELEVENLABS_API_KEY) {
     return res.status(503).json({ ok: false, error: "Falta configurar ELEVENLABS_API_KEY." });
@@ -159,6 +175,7 @@ app.post("/api/voice/generate", async (req, res) => {
   }
 
   try {
+    // CORREGIDO: URL apuntando al subdominio técnico 'api.elevenlabs.io'
     const response = await fetch(
       `https://elevenlabs.io{encodeURIComponent(voice_id)}?output_format=mp3_44100_128`,
       {
@@ -202,7 +219,9 @@ app.post("/api/voice/generate", async (req, res) => {
   }
 });
 
-// OPENAI VISION ENDPOINT
+// ======================================================
+// ENDPOINT: SCRIPT DESDE IMAGEN (LÍNEAS 207 A 246)
+// ======================================================
 app.post("/api/generate-script-from-image", async (req, res) => {
   const { image, style = "animador", energy = "media" } = req.body || {};
 
@@ -234,7 +253,6 @@ app.post("/api/generate-script-from-image", async (req, res) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error?.message || "Error en OpenAI.");
 
-    // CORREGIDO: Sintaxis de lectura segura sin doble punto ni doble interrogación
     const choicesList = data.choices || [];
     const firstItem = choicesList.slice(0, 1).shift();
     const script = firstItem?.message?.content?.trim() || "";
