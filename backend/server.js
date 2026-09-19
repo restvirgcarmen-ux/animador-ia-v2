@@ -12,7 +12,6 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
 
-// Configuración de CORS habilitada para todas las peticiones externas
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST"],
@@ -21,7 +20,7 @@ app.use(cors({
 
 app.use(express.json({ limit: "20mb" }));
 
-// RUTA PRINCIPAL (CORREGIDA: Ya no saldrá Cannot GET /)
+// RUTA PRINCIPAL DE CONTROL
 app.get("/", (req, res) => {
   res.json({
     ok: true,
@@ -40,24 +39,16 @@ app.get("/api/health", (req, res) => {
 });
 
 function templateScript(brief, style = "animador", energy = "media") {
-  const t = {
-    animador: [
-      "¡ATENCIÓN, ATENCIÓN, SEÑORES Y SEÑORAS!",
-      "¡No te lo puedes perder! ¡Te esperamos!"
-    ],
-    fiesta: [
-      "¡¡¡PREPÁRATE PARA LA FIESTA!!!",
-      "¡¡¡QUE EMPIECE LA FIESTA!!!"
-    ],
-    comercial: [
-      "Atención a todos nuestros amigos y clientes.",
-      "Los esperamos. ¡No faltes!"
-    ],
-    orquesta: [
-      "¡Señoras y señores, amantes de la buena música!",
-      "¡Recibamos este gran espectáculo con un fuerte aplauso!"
-    ]
-  }[style] || ["¡ATENCIÓN, ATENCIÓN!", "¡Te esperamos!"];
+  const stylesMap = new Map([
+    ["animador", ["¡ATENCIÓN, ATENCIÓN, SEÑORES Y SEÑORAS!", "¡No te lo puedes perder! ¡Te esperamos!"]],
+    ["fiesta", ["¡¡¡PREPÁRATE PARA LA FIESTA!!!", "¡¡¡QUE EMPIECE LA FIESTA!!!"]],
+    ["comercial", ["Atención a todos nuestros amigos y clientes.", "Los esperamos. ¡No faltes!"]],
+    ["orquesta", ["¡Señoras y señores, amantes de la buena música!", "¡Recibamos este gran espectáculo con un fuerte aplauso!"]]
+  ]);
+
+  const selectedStyle = stylesMap.get(style) || ["¡ATENCIÓN, ATENCIÓN!", "¡Te esperamos!"];
+  const intro = selectedStyle.at(0);
+  const outro = selectedStyle.at(1);
 
   let middle = String(brief).trim();
 
@@ -67,7 +58,7 @@ function templateScript(brief, style = "animador", energy = "media") {
     middle = middle.replace(/\./g, "!");
   }
 
-  return `${t[0]}\n\n${middle}\n\n${t[1]}`;
+  return `${intro}\n\n${middle}\n\n${outro}`;
 }
 
 app.post("/api/generate-script", (req, res) => {
@@ -87,28 +78,17 @@ app.post("/api/generate-script", (req, res) => {
   });
 });
 
-// ENDPOINT: CLONACIÓN DE VOZ (REPARADO Y SEGURO)
+// CLONACIÓN DE AUDIO DESDE CELULAR
 app.post("/api/voice/clone", async (req, res) => {
-  console.log("================================");
-  console.log("CLONE VOICE: PETICIÓN RECIBIDA");
-  console.log("================================");
-
   if (!ELEVENLABS_API_KEY) {
-    return res.status(503).json({
-      ok: false,
-      error: "Falta configurar ELEVENLABS_API_KEY en el servidor."
-    });
+    return res.status(503).json({ ok: false, error: "Falta configurar ELEVENLABS_API_KEY." });
   }
 
   try {
     const { audioBase64, name } = req.body || {};
 
-    if (!audioBase64) {
-      return res.status(400).json({ ok: false, error: "No se recibió la muestra de voz." });
-    }
-
-    if (!name?.trim()) {
-      return res.status(400).json({ ok: false, error: "Falta el nombre de la voz." });
+    if (!audioBase64 || !name?.trim()) {
+      return res.status(400).json({ ok: false, error: "Faltan datos de la voz." });
     }
 
     let mimeType = "audio/mpeg";
@@ -116,7 +96,7 @@ app.post("/api/voice/clone", async (req, res) => {
 
     if (typeof audioBase64 === 'string' && audioBase64.includes(";base64,")) {
       const parts = audioBase64.split(";base64,");
-      let rawMime = parts.shift();
+      const rawMime = parts.shift();
       mimeType = rawMime.replace("data:", "");
       base64Data = parts.pop();
     } else {
@@ -127,7 +107,7 @@ app.post("/api/voice/clone", async (req, res) => {
     const audioBuffer = Buffer.from(base64Data, "base64");
 
     if (audioBuffer.length === 0) {
-      return res.status(400).json({ ok: false, error: "El archivo de audio está vacío o corrupto." });
+      return res.status(400).json({ ok: false, error: "Archivo de audio vacío o corrupto." });
     }
 
     const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") ? "mp3" : "m4a";
@@ -150,14 +130,9 @@ app.post("/api/voice/clone", async (req, res) => {
       body: bodyBuffer
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      throw new Error("ElevenLabs devolvió una respuesta inesperada.");
-    }
-
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data?.detail?.message || data?.message || "ElevenLabs no pudo crear la voz.");
+      throw new Error(data?.detail?.message || data?.message || "Error en ElevenLabs.");
     }
 
     return res.json({
@@ -167,31 +142,20 @@ app.post("/api/voice/clone", async (req, res) => {
     });
 
   } catch (e) {
-    console.error("ERROR CLONANDO VOZ:", e);
-    return res.status(500).json({
-      ok: false,
-      error: e.message || "No se pudo crear la voz."
-    });
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// ENDPOINT: GENERACIÓN DE AUDIO TEXT-TO-SPEECH (COMPLETO)
+// GENERADOR TEXT TO SPEECH
 app.post("/api/voice/generate", async (req, res) => {
   if (!ELEVENLABS_API_KEY) {
-    return res.status(503).json({
-      ok: false,
-      error: "Falta configurar ELEVENLABS_API_KEY en el servidor."
-    });
+    return res.status(503).json({ ok: false, error: "Falta configurar ELEVENLABS_API_KEY." });
   }
 
   const { text, voice_id } = req.body || {};
 
-  if (!text?.trim()) {
-    return res.status(400).json({ ok: false, error: "Falta el texto del guion." });
-  }
-
-  if (!voice_id) {
-    return res.status(400).json({ ok: false, error: "Primero selecciona una voz personalizada." });
+  if (!text?.trim() || !voice_id) {
+    return res.status(400).json({ ok: false, error: "Faltan parámetros de generación." });
   }
 
   try {
@@ -220,7 +184,7 @@ app.post("/api/voice/generate", async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || "ElevenLabs no pudo generar el audio.");
+      throw new Error(errorText || "Error al procesar el audio en ElevenLabs.");
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -234,28 +198,20 @@ app.post("/api/voice/generate", async (req, res) => {
     return res.send(audioBuffer);
 
   } catch (e) {
-    console.error("ERROR GENERANDO AUDIO:", e);
-    return res.status(500).json({
-      ok: false,
-      error: e.message || "No se pudo procesar la conversión."
-    });
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// ENDPOINT: INTELIGENCIA ARTIFICIAL CON IMAGENES (REPARADO)
+// OPENAI VISION ENDPOINT
 app.post("/api/generate-script-from-image", async (req, res) => {
   const { image, style = "animador", energy = "media" } = req.body || {};
 
-  if (!image?.startsWith("data:image/")) {
-    return res.status(400).json({ ok: false, error: "Falta una imagen válida." });
-  }
-
-  if (!OPENAI_API_KEY) {
-    return res.status(503).json({ ok: false, error: "Falta la clave de OpenAI." });
+  if (!image?.startsWith("data:image/") || !OPENAI_API_KEY) {
+    return res.status(400).json({ ok: false, error: "Configuración o imagen no válida." });
   }
 
   try {
-    const prompt = `Analiza esta imagen publicitaria y crea un guion breve y atractivo para un animador en español. Extrae el nombre del negocio, fechas, lugar y promociones. Estilo: ${style}. Energía: ${energy}. Devuelve únicamente el guion final.`;
+    const prompt = `Analiza esta imagen publicitaria y crea un guion breve para un animador en español. Estilo: ${style}. Energía: ${energy}.`;
 
     const response = await fetch("https://openai.com", {
       method: "POST",
@@ -276,9 +232,11 @@ app.post("/api/generate-script-from-image", async (req, res) => {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || "Error de OpenAI.");
+    if (!response.ok) throw new Error(data?.error?.message || "Error en OpenAI.");
 
-    const script = data.choices[0].message.content.trim();
+    const firstChoice = data.choices.at(0);
+    const script = firstChoice.message.content.trim();
+
     res.json({ ok: true, script, engine: "vision-ai" });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -286,5 +244,5 @@ app.post("/api/generate-script-from-image", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor activo corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor activo en el puerto ${PORT}`);
 });
