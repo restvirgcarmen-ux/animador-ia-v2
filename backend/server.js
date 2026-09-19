@@ -242,6 +242,109 @@ app.post("/api/voice/clone", async (req, res) => {
   }
 });
 
+// ======================================================
+// ENDPOINT: GENERACIÓN DE ANUNCIO TEXT-TO-SPEECH
+// ======================================================
+app.post("/api/voice/generate", async (req, res) => {
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(503).json({ ok: false, error: "Falta configurar ELEVENLABS_API_KEY." });
+  }
+
+  const { text, voice_id } = req.body || {};
+
+  if (!text?.trim() || !voice_id) {
+    return res.status(400).json({ ok: false, error: "Faltan parámetros de generación." });
+  }
+
+  try {
+    const response = await fetch(
+      `https://elevenlabs.io{encodeURIComponent(voice_id)}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg"
+        },
+        body: JSON.stringify({
+          text: String(text).trim(),
+          model_id: ELEVENLABS_MODEL,
+          language_code: "es",
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.8,
+            style: 0.25,
+            use_speaker_boost: true
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Error al procesar el audio en ElevenLabs.");
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = Buffer.from(arrayBuffer);
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Length": audioBuffer.length
+    });
+
+    return res.send(audioBuffer);
+
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ======================================================
+// ENDPOINT: SCRIPT DESDE IMAGEN (OPENAI VISION)
+// ======================================================
+app.post("/api/generate-script-from-image", async (req, res) => {
+  const { image, style = "animador", energy = "media" } = req.body || {};
+
+  if (!image?.startsWith("data:image/") || !OPENAI_API_KEY) {
+    return res.status(400).json({ ok: false, error: "Configuración o imagen no válida." });
+  }
+
+  try {
+    const prompt = `Analiza esta imagen publicitaria y crea un guion breve para un animador en español. Estilo: ${style}. Energía: ${energy}.`;
+
+    const response = await fetch("https://openai.com", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: image } }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || "Error en OpenAI.");
+
+    const choicesList = data.choices || [];
+    const firstItem = choicesList.slice(0, 1).shift();
+    const script = firstItem?.message?.content?.trim() || "";
+
+    res.json({ ok: true, script, engine: "vision-ai" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ENCENDIDO DEL SERVIDOR
 app.listen(PORT, () => {
   console.log(`Servidor activo en el puerto ${PORT}`);
 });
