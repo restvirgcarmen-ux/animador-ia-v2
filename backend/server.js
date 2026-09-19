@@ -170,22 +170,28 @@ app.post("/api/voice/clone", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Falta el nombre de la voz." });
     }
 
+    // ======================================================
+    // PROCESAMIENTO SEGURO DEL AUDIO BASE64 (SOLUCIÓN DE RAÍZ)
+    // ======================================================
     let mimeType = "audio/mpeg";
     let base64Data = "";
 
-    // CORRECCIÓN: Separación ultra-segura del Base64 funcione o no con el prefijo "data:"
-    if (audioBase64.includes(";base64,")) {
+    if (typeof audioBase64 === 'string' && audioBase64.includes(";base64,")) {
+      // Separamos el encabezado de los datos reales usando corchetes de arreglo correctos
       const parts = audioBase64.split(";base64,");
-      mimeType = parts[0].replace("data:", "");
-      base64Data = parts[1];
+      mimeType = parts[0].replace("data:", ""); // Obtiene el tipo (ej: audio/webm)
+      base64Data = parts[1];                    // Obtiene la cadena Base64 pura
     } else {
       base64Data = audioBase64;
     }
 
-    // Convertir los datos puros a Buffer binario
+    // Eliminamos cualquier espacio en blanco o salto de línea que los celulares suelen meter
+    base64Data = String(base64Data).replace(/[\s\r\n]+/g, "");
+
+    // Convertimos la cadena limpia a un Buffer de Node.js
     const audioBuffer = Buffer.from(base64Data, "base64");
 
-    // Validar que el buffer no esté vacío
+    // Validación de seguridad por si el buffer llega vacío
     if (audioBuffer.length === 0) {
       return res.status(400).json({ ok: false, error: "El archivo de audio está vacío o corrupto." });
     }
