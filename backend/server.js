@@ -47,8 +47,8 @@ function templateScript(brief, style = "animador", energy = "media") {
   ]);
 
   const selectedStyle = stylesMap.get(style) || ["¡ATENCIÓN, ATENCIÓN!", "¡Te esperamos!"];
-  const intro = selectedStyle.at(0);
-  const outro = selectedStyle.at(1);
+  const intro = selectedStyle.slice(0, 1).shift();
+  const outro = selectedStyle.slice(1, 2).shift();
 
   let middle = String(brief).trim();
 
@@ -234,8 +234,10 @@ app.post("/api/generate-script-from-image", async (req, res) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error?.message || "Error en OpenAI.");
 
-    const firstChoice = data.choices.at(0);
-    const script = firstChoice.message.content.trim();
+    // CORREGIDO: Sintaxis de lectura segura sin doble punto ni doble interrogación
+    const choicesList = data.choices || [];
+    const firstItem = choicesList.slice(0, 1).shift();
+    const script = firstItem?.message?.content?.trim() || "";
 
     res.json({ ok: true, script, engine: "vision-ai" });
   } catch (e) {
