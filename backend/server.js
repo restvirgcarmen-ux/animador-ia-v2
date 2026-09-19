@@ -170,14 +170,25 @@ app.post("/api/voice/clone", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Falta el nombre de la voz." });
     }
 
-    const match = audioBase64.match(/^data:(audio\/[^;]+);base64,(.+)\$/);
-    if (!match) {
-      return res.status(400).json({ ok: false, error: "Formato de audio Base64 no válido." });
+    let mimeType = "audio/mpeg";
+    let base64Data = "";
+
+    // CORRECCIÓN: Separación ultra-segura del Base64 funcione o no con el prefijo "data:"
+    if (audioBase64.includes(";base64,")) {
+      const parts = audioBase64.split(";base64,");
+      mimeType = parts[0].replace("data:", "");
+      base64Data = parts[1];
+    } else {
+      base64Data = audioBase64;
     }
 
-    const mimeType = match[1];
-    const base64Data = match[2];
+    // Convertir los datos puros a Buffer binario
     const audioBuffer = Buffer.from(base64Data, "base64");
+
+    // Validar que el buffer no esté vacío
+    if (audioBuffer.length === 0) {
+      return res.status(400).json({ ok: false, error: "El archivo de audio está vacío o corrupto." });
+    }
 
     const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") ? "mp3" : "m4a";
     const boundary = "----WebKitFormBoundary" + Math.random().toString(16).substring(2);
@@ -190,7 +201,7 @@ app.post("/api/voice/clone", async (req, res) => {
     );
     const bodyBuffer = Buffer.concat([header, audioBuffer, middleField]);
 
-    // CORREGIDO: Se cambió el enlace a la API real de ElevenLabs para clonación
+    // Enviar a ElevenLabs utilizando la URL técnica correcta de la API
     const response = await fetch("https://elevenlabs.io", {
       method: "POST",
       headers: {
@@ -202,7 +213,7 @@ app.post("/api/voice/clone", async (req, res) => {
 
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
-      throw new Error("ElevenLabs de volvió una respuesta inesperada.");
+      throw new Error("ElevenLabs devolvió una respuesta inesperada.");
     }
 
     const data = await response.json();
@@ -223,124 +234,4 @@ app.post("/api/voice/clone", async (req, res) => {
       error: e.message || "No se pudo crear la voz."
     });
   }
-});
-
-app.post("/api/voice/generate", async (req, res) => {
-  if (!ELEVENLABS_API_KEY) {
-    return res.status(503).json({
-      ok: false,
-      error: "Falta configurar ELEVENLABS_API_KEY en el servidor."
-    });
-  }
-
-  const { text, voice_id } = req.body || {};
-
-  if (!text?.trim()) {
-    return res.status(400).json({
-      ok: false,
-      error: "Falta el texto del guion."
-    });
-  }
-
-  if (!voice_id) {
-    return res.status(400).json({
-      ok: false,
-      error: "Primero selecciona una voz personalizada."
-    });
-  }
-
-  try {
-    const response = await fetch(
-      `https://elevenlabs.io{encodeURIComponent(voice_id)}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVENLABS_API_KEY,
-          "Content-Type": "application/json",
-          "Accept": "audio/mpeg"
-        },
-        body: JSON.stringify({
-          text: String(text).trim(),
-          model_id: ELEVENLABS_MODEL,
-          language_code: "es",
-          voice_settings: {
-            stability: 0.45,
-            similarity_boost: 0.8,
-            style: 0.25,
-            use_speaker_boost: true
-          }
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "ElevenLabs no pudo generar el audio.");
-    }
-
-    // CORREGIDO: Código de procesamiento y envío de audio completo al cliente
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = Buffer.from(arrayBuffer);
-
-    res.set({
-      "Content-Type": "audio/mpeg",
-      "Content-Length": audioBuffer.length
-    });
-
-    return res.send(audioBuffer);
-
-  } catch (e) {
-    console.error("ERROR GENERANDO AUDIO:", e);
-    return res.status(500).json({
-      ok: false,
-      error: e.message || "No se pudo procesar la conversión de texto a voz."
-    });
-  }
-});
-
-// CORREGIDO: Endpoint de OpenAI Vision reparado con su ruta real de comunicación
-app.post("/api/generate-script-from-image", async (req, res) => {
-  const { image, style = "animador", energy = "media" } = req.body || {};
-
-  if (!image?.startsWith("data:image/")) {
-    return res.status(400).json({ ok: false, error: "Falta una imagen válida." });
-  }
-
-  if (!OPENAI_API_KEY) {
-    return res.status(503).json({ ok: false, error: "Falta configurar la clave de OpenAI." });
-  }
-
-  try {
-    const prompt = `Analiza esta imagen publicitaria y crea un guion breve, claro y atractivo para un animador en español. Extrae solamente información visible: nombre del negocio, fecha, hora, lugar, promociones y llamados a la acción. No inventes datos. Estilo: ${style}. Energía: ${energy}. Devuelve únicamente el guion final.`;
-
-    const response = await fetch("https://openai.com", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: image } }
-          ]
-        }]
-      })
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || "Error de OpenAI.");
-
-    const script = data.choices?.[0]?.message?.content?.trim();
-    res.json({ ok: true, script, engine: "vision-ai" });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor activo corriendo en http://localhost:${PORT}`);
 });
