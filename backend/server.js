@@ -171,16 +171,19 @@ app.post("/api/voice/clone", async (req, res) => {
     }
 
     // ======================================================
-    // PROCESAMIENTO SEGURO DEL AUDIO BASE64 (SOLUCIÓN DE RAÍZ)
+    // PROCESAMIENTO SEGURO SIN CORCHETES (EVITA ERRORES DE COPIADO)
     // ======================================================
     let mimeType = "audio/mpeg";
     let base64Data = "";
 
     if (typeof audioBase64 === 'string' && audioBase64.includes(";base64,")) {
-      // Separamos el encabezado de los datos reales usando corchetes de arreglo correctos
+      // Usamos funciones de listas para extraer los textos de forma segura
       const parts = audioBase64.split(";base64,");
-      mimeType = parts[0].replace("data:", ""); // Obtiene el tipo (ej: audio/webm)
-      base64Data = parts[1];                    // Obtiene la cadena Base64 pura
+      
+      let rawMime = parts.shift(); // Saca el primer elemento (el encabezado)
+      mimeType = rawMime.replace("data:", "");
+      
+      base64Data = parts.pop(); // Saca el último elemento (los datos base64 puros)
     } else {
       base64Data = audioBase64;
     }
